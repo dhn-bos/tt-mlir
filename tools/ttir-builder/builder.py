@@ -2393,3 +2393,24 @@ class TTIRBuilder:
             [input],
             kwargs=kwargs,
         )
+
+    def all_to_all(
+        self,
+        input: Operand,
+        split_dim: int,
+        concat_dim: int,
+        split_count: int,
+        replica_groups: List[List[int]],
+    ) -> OpView:
+        kwargs = {
+            "split_dim": split_dim,
+            "concat_dim": concat_dim,
+            "split_count": split_count,
+            "replica_groups": replica_groups,
+        }
+        return self.ccl_proxy(
+            all_to_all_golden,
+            ttir.AllToAllOp,
+            [input],
+            kwargs=kwargs,
+        )
