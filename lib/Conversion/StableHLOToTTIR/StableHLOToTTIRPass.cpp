@@ -48,14 +48,14 @@ public:
     });
 
     // Convert scalars to 1D tensors.
-    addConversion([&](RankedTensorType type) -> RankedTensorType {
-      if (!type.getShape().empty()) {
-        return type;
-      }
+    //addConversion([&](RankedTensorType type) -> RankedTensorType {
+      //if (!type.getShape().empty()) {
+        //return type;
+      //}
 
-      return RankedTensorType::get(/*shape=*/{1}, type.getElementType(),
-                                   type.getEncoding());
-    });
+      //return RankedTensorType::get(/*shape=*/{1}, type.getElementType(),
+                                   //type.getEncoding());
+    //});
   }
 };
 
