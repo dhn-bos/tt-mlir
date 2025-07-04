@@ -712,14 +712,14 @@ public:
       RewritePatternSet patterns(&getContext());
       patterns.add<
           TTNNAllReduceWorkarounds, TTNNAllGatherWorkarounds,
-          workarounds::decomposition::ReduceOpsKeepDimRewritePattern<
-              ttnn::SumOp, /*keepDimUnsupported*/ false>,
-          workarounds::decomposition::ReduceOpsKeepDimRewritePattern<
-              ttnn::MaxOp, /*keepDimUnsupported*/ false>,
-          workarounds::decomposition::ReduceOpsKeepDimRewritePattern<
-              ttnn::MeanOp, /*keepDimUnsupported*/ false>,
-          workarounds::decomposition::ReduceOpsKeepDimRewritePattern<
-              ttnn::MinOp, /*keepDimUnsupported*/ false>,
+          //workarounds::decomposition::ReduceOpsKeepDimRewritePattern<
+              //ttnn::SumOp, /*keepDimUnsupported*/ false>,
+          //workarounds::decomposition::ReduceOpsKeepDimRewritePattern<
+              //ttnn::MaxOp, /*keepDimUnsupported*/ false>,
+          //workarounds::decomposition::ReduceOpsKeepDimRewritePattern<
+              //ttnn::MeanOp, /*keepDimUnsupported*/ false>,
+          //workarounds::decomposition::ReduceOpsKeepDimRewritePattern<
+              //ttnn::MinOp, /*keepDimUnsupported*/ false>,
           workarounds::decomposition::CumSumOpDimRewritePattern,
           workarounds::decomposition::CumSumOpRankRewritePattern,
           workarounds::decomposition::EmbeddingOpSqueezeWeightRewritePattern,
