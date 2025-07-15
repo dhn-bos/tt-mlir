@@ -1,6 +1,10 @@
 // REQUIRES: stablehlo
+<<<<<<< HEAD
 // RUN: ttmlir-opt -split-input-file --stablehlo-to-ttir-pipeline -o %t %s
 // RUN: FileCheck %s --input-file=%t
+=======
+// RUN: ttmlir-opt -split-input-file --stablehlo-pipeline --stablehlo-to-ttir-pipeline %s | FileCheck %s
+>>>>>>> 73409fc15 (#4047: Refactored shardy and gspmd utils and conversions.)
 
 module {
   func.func @all_reduce_variadic(%arg0: tensor<f32>, %arg1: tensor<f32>) -> (tensor<f32>, tensor<f32>) {

@@ -1,6 +1,10 @@
 // REQUIRES: stablehlo
+<<<<<<< HEAD
 // RUN: ttmlir-opt -split-input-file --stablehlo-to-ttir-pipeline -o %t %s
 // RUN: FileCheck %s --input-file=%t
+=======
+// RUN: ttmlir-opt -split-input-file --stablehlo-pipeline --stablehlo-to-ttir-pipeline %s | FileCheck %s
+>>>>>>> 73409fc15 (#4047: Refactored shardy and gspmd utils and conversions.)
 
 module @jit_loss_dp attributes {mhlo.num_partitions = 8 : i32, mhlo.num_replicas = 1 : i32} {
   sdy.mesh @mesh = <["x"=1, "y"=8]>
@@ -87,6 +91,66 @@ module @jit_loss_dp attributes {mhlo.num_partitions = 8 : i32, mhlo.num_replicas
 }
 
 // CHECK-LABEL @main
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
+// CHECK: "ttir.mesh_shard"
+// CHECK-SAME: shard_dims = array<i64: -1>
+// CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
+// CHECK-SAME: shard_shape = array<i64: 1>
+// CHECK-SAME: shard_type = #ttcore.shard_type<identity>
 // CHECK: "ttir.mesh_shard"
 // CHECK-SAME: shard_dims = array<i64: -1, 0>
 // CHECK-SAME: shard_direction = #ttcore.shard_direction<full_to_shard>
