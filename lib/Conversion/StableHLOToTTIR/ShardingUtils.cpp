@@ -186,7 +186,7 @@ MeshSharding::convertGSPMDShardingToMeshSharding(StringRef shardingStr) {
                                        "Fail to parse GSPMD sharding.");
       }
       setNonDevicesShardType(ttcore::MeshShardType::Identity);
-    } else if (str.contains("replicated")) {
+    } else if (str.contains("replicated") || str.contains("unknown")) {
       // replicated: all devices have whole data
       if (shardType != ttcore::MeshShardType::Identity) {
         return llvm::createStringError(std::errc::invalid_argument,
@@ -258,6 +258,11 @@ bool MeshSharding::determineMeshShardOpCreationAndShardType(
     bool foundSharding) {
   assert(shardType == mlir::tt::ttcore::MeshShardType::Replicate ||
          shardType == mlir::tt::ttcore::MeshShardType::Devices);
+
+  // HACK: Always create identity mesh_shard op to work around automatic
+  // parallelization pass cleaning up annotations before conversion.
+  setDummyShardingOp(); // shardType = Identity
+  return true;
 
   // If JAX expects pre-sharded input/return (foundSharding) and if it is
   // replicate, do not create mesh_shard op as the input/output shapes are
