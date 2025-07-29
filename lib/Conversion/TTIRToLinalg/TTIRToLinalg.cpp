@@ -1677,7 +1677,6 @@ void populateTTIRToTosaPatterns(MLIRContext *ctx, RewritePatternSet &patterns,
       ElementwiseUnaryOpConversionPattern<ttir::NegOp, tosa::NegateOp>,
       ElementwiseUnaryOpConversionPattern<ttir::ReciprocalOp,
                                           tosa::ReciprocalOp>,
-      ElementwiseUnaryOpConversionPattern<ttir::RsqrtOp, tosa::RsqrtOp>,
       ElementwiseUnaryOpConversionPattern<ttir::SigmoidOp, tosa::SigmoidOp>,
       ElementwiseUnaryOpConversionPattern<ttir::TanhOp, tosa::TanhOp>>(
       typeConverter, ctx);

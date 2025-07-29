@@ -605,22 +605,6 @@ module {
       return
     }
 
-    // CHECK-LABEL: func @rsqrt_tile_init
-    func.func @rsqrt_tile_init() -> () attributes {ttkernel.thread = #ttkernel.thread<compute>} {
-      // CHECK: emitc.call_opaque "rsqrt_tile_init"()
-      "ttkernel.rsqrt_tile_init"() : () -> ()
-      return
-    }
-
-    // CHECK-LABEL: func @rsqrt_tile
-    func.func @rsqrt_tile() -> () attributes {ttkernel.thread = #ttkernel.thread<compute>} {
-      // CHECK: %[[DST_INDEX:.*]] = "emitc.constant"
-      %dst_index = arith.constant 3 : i32
-      // CHECK: emitc.call_opaque "rsqrt_tile"(%[[DST_INDEX]])
-      "ttkernel.rsqrt_tile"(%dst_index) : (i32) -> ()
-      return
-    }
-
     // CHECK-LABEL: func @sin_tile_init
     func.func @sin_tile_init() -> () attributes {ttkernel.thread = #ttkernel.thread<compute>} {
       // CHECK: emitc.call_opaque "sin_tile_init"()

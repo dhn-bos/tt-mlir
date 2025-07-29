@@ -130,7 +130,6 @@ enum EltwiseUnaryOpType: uint32 {
   Neg,
   Relu,
   Sqrt,
-  Rsqrt,
   Sigmoid,
   Sin,
   Reciprocal,

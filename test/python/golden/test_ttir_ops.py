@@ -284,32 +284,6 @@ def cbrt(in0: Operand, builder: TTIRBuilder, unit_attrs: Optional[List[str]] = N
     return builder.cbrt(in0, unit_attrs=unit_attrs)
 
 
-@pytest.mark.skip_config(["ttmetal", "p150"], reason="Issue #4081")
-@pytest.mark.parametrize("shape", [(128, 128)], ids=shape_str)
-@pytest.mark.parametrize("dtype", [torch.float32], ids=["f32"])
-@pytest.mark.parametrize("target", ["ttnn", "ttmetal"])
-def test_rsqrt(shape: Shape, dtype: torch.dtype, target: str, request):
-    def rsqrt(
-        in0: Operand, builder: TTIRBuilder, unit_attrs: Optional[List[str]] = None
-    ):
-        input_tensor = torch.abs(torch.randn(shape, dtype=dtype))
-        golden_output_tensor = torch.rsqrt(input_tensor)
-        builder.set_graph_input_output(
-            [input_tensor], [golden_output_tensor], override=True
-        )
-        return builder.rsqrt(in0, unit_attrs=unit_attrs)
-
-    compile_to_flatbuffer(
-        rsqrt,
-        [shape],
-        [dtype],
-        test_base=request.node.name,
-        output_root=request.config.getoption("--path"),
-        system_desc_path=request.config.getoption("--sys-desc"),
-        target=target,
-    )
-
-
 def sigmoid(in0: Operand, builder: TTIRBuilder, unit_attrs: Optional[List[str]] = None):
     return builder.sigmoid(in0, unit_attrs=unit_attrs)
 

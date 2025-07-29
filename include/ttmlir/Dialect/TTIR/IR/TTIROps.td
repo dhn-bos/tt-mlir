@@ -922,27 +922,6 @@ def TTIR_ReluOp : TTIR_ElementwiseUnaryOp<"relu", [TTIR_Idempotence]> {
     }];
 }
 
-def TTIR_RsqrtOp : TTIR_ElementwiseUnaryOp<"rsqrt"> {
-    let summary = "Eltwise reciprocal square root.";
-    let description = [{
-      The `rsqrt` operation computes the reciprocal square root of each element in the input tensor.
-
-      For each element, it returns the reciprocal of the square root of the value.
-
-      Example:
-      ```mlir
-      // Compute reciprocal square root of all elements in %input
-      %result = ttir.rsqrt(%input, %output) : tensor<4x4xf32>, tensor<4x4xf32> -> tensor<4x4xf32>
-      // Input tensor:
-      // [[1.7, 2.0, -0.3, 4.5], ... ]
-      // Output tensor:
-      // [[0.5882, 0.5, -3.3333, 0.2173], ... ]
-      ```
-
-      Mathematical definition: rsqrt(x) = 1 / sqrt(x)
-    }];
-}
-
 def TTIR_SigmoidOp: TTIR_ElementwiseUnaryOp<"sigmoid"> {
     let summary = "Eltwise sigmoid.";
     let description = [{

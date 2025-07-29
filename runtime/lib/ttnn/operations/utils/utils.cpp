@@ -91,7 +91,6 @@ toTTNNUnaryOpType(::tt::target::ttnn::UnaryOpType unaryOpType) {
       {FbUnaryOpType::Signbit, TTNNUnaryOpType::SIGNBIT},
       {FbUnaryOpType::Asin, TTNNUnaryOpType::ASIN},
       {FbUnaryOpType::Acos, TTNNUnaryOpType::ACOS},
-      {FbUnaryOpType::Rsqrt, TTNNUnaryOpType::RSQRT},
       {FbUnaryOpType::Relu6, TTNNUnaryOpType::RELU6},
       {FbUnaryOpType::Atan, TTNNUnaryOpType::ATAN},
       {FbUnaryOpType::Erf, TTNNUnaryOpType::ERF},

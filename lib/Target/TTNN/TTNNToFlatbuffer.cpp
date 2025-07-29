@@ -1363,8 +1363,6 @@ createEltwiseUnaryOp(FlatbufferObjectCache &cache, EltwiseUnaryOp op) {
     type = ::tt::target::ttnn::EltwiseUnaryOpType::Relu;
   } else if constexpr (std::is_same_v<EltwiseUnaryOp, SqrtOp>) {
     type = ::tt::target::ttnn::EltwiseUnaryOpType::Sqrt;
-  } else if constexpr (std::is_same_v<EltwiseUnaryOp, RsqrtOp>) {
-    type = ::tt::target::ttnn::EltwiseUnaryOpType::Rsqrt;
   } else if constexpr (std::is_same_v<EltwiseUnaryOp, SigmoidOp>) {
     type = ::tt::target::ttnn::EltwiseUnaryOpType::Sigmoid;
   } else if constexpr (std::is_same_v<EltwiseUnaryOp, SinOp>) {
@@ -2058,10 +2056,6 @@ emitTTNNOperation(FlatbufferObjectCache &cache, Operation *op,
   }
   if (auto sqrtOp = dyn_cast<SqrtOp>(op); sqrtOp) {
     return createOperation(cache, createEltwiseUnaryOp(cache, sqrtOp),
-                           debugString, locInfo);
-  }
-  if (auto rsqrtOp = dyn_cast<RsqrtOp>(op); rsqrtOp) {
-    return createOperation(cache, createEltwiseUnaryOp(cache, rsqrtOp),
                            debugString, locInfo);
   }
   if (auto signOp = dyn_cast<SignOp>(op); signOp) {

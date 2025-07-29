@@ -2309,8 +2309,6 @@ void populateTTNNToEmitCPatterns(mlir::MLIRContext *ctx,
       EltwiseUnaryWithFastAndApproximateModeOpConversionPattern<
           mlir::tt::ttnn::GeluOp>,
       EltwiseUnaryOpConversionPattern<mlir::tt::ttnn::SqrtOp>,
-      EltwiseUnaryWithFastAndApproximateModeOpConversionPattern<
-          mlir::tt::ttnn::RsqrtOp>,
       EltwiseUnaryOpConversionPattern<mlir::tt::ttnn::SignOp>,
       EltwiseUnaryWithVectorAndFastAndApproximateModeOpConversionPattern<
           mlir::tt::ttnn::SigmoidOp>,

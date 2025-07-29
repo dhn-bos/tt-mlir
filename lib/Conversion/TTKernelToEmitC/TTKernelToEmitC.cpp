@@ -663,8 +663,6 @@ public:
         TTKernelToEmitCOpaqueRewriter<ttkernel::ReduceInitOp>,
         TTKernelToEmitCOpaqueRewriter<ttkernel::ReduceTileOp>,
         TTKernelToEmitCOpaqueRewriter<ttkernel::RoundingTileInitOp>,
-        TTKernelToEmitCOpaqueRewriter<ttkernel::RsqrtTileInitOp>,
-        TTKernelToEmitCOpaqueRewriter<ttkernel::RsqrtTileOp>,
         TTKernelToEmitCOpaqueRewriter<ttkernel::SqrtTileInitOp>,
         TTKernelToEmitCOpaqueRewriter<ttkernel::SqrtTileOp>,
         TTKernelToEmitCOpaqueRewriter<ttkernel::SigmoidTileInitOp>,

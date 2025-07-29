@@ -310,8 +310,6 @@ addElementwiseUnaryOpsConversionPatterns(MLIRContext *ctx,
   patterns.add<TosaToTTIRDefaultDPSOpConversionPattern<
       tosa::ReciprocalOp, mlir::tt::ttir::ReciprocalOp>>(typeConverter, ctx);
   patterns.add<TosaToTTIRDefaultDPSOpConversionPattern<
-      tosa::RsqrtOp, mlir::tt::ttir::RsqrtOp>>(typeConverter, ctx);
-  patterns.add<TosaToTTIRDefaultDPSOpConversionPattern<
       tosa::SigmoidOp, mlir::tt::ttir::SigmoidOp>>(typeConverter, ctx);
   patterns.add<TosaToTTIRDefaultDPSOpConversionPattern<tosa::SinOp,
                                                        mlir::tt::ttir::SinOp>>(
