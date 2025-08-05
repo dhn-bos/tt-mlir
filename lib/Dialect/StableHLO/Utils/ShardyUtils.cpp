@@ -577,7 +577,13 @@ ShardyMeshSharding::generate(sdy::MeshAttr meshAttr,
                       std::multiplies<int64_t>());
   // No partition indicates replicate to all devices.
   if (totalPartition == 1) {
-    setNonDevicesShardType(mlir::tt::ttcore::MeshShardType::Replicate);
+    auto meshShardType =
+        shardDirection == ttcore::MeshShardDirection::FullToShard
+            ? ttcore::MeshShardType::Replicate
+            : ttcore::MeshShardType::Identity;
+    // If the shardDirection is FullToShard, we replicate to all devices.
+    // If the shardDirection is ShardToFull, we use Identity.
+    setNonDevicesShardType(meshShardType);
   }
 
   // Check if the input is already pre-sharded. If it is, override shardType to

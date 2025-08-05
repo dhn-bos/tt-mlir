@@ -23,6 +23,7 @@
 #include "ttmlir/Dialect/TTNN/Transforms/Workarounds/Decomposition/UpsampleOpRewritePattern.h"
 #include "ttmlir/Dialect/TTNN/Utils/TransformUtils.h"
 #include "ttmlir/Dialect/TTNN/Utils/Utils.h"
+#include "ttmlir/Conversion/TTIRToTTNN/Utils.h"
 #include "ttmlir/Utils.h"
 
 #include "mlir/IR/BuiltinTypes.h"
@@ -493,6 +494,11 @@ public:
 
   LogicalResult matchAndRewrite(ttnn::AllReduceOp op,
                                 PatternRewriter &rewriter) const override {
+    if (true) {
+      // It hangs on the device if we enable this workaround.
+      rewriter.replaceOp(op, op.getInput());
+      return success();
+    }
     RankedTensorType inputType =
         mlir::cast<RankedTensorType>(op.getInput().getType());
     llvm::SmallVector<int64_t> inputTypeShape(inputType.getShape());
@@ -501,6 +507,27 @@ public:
     Value deviceValue = op.getDevice();
     auto deviceDesc = ttcore::lookupDevice(op);
     ::llvm::ArrayRef<int64_t> meshShape = deviceDesc.getMeshShape();
+    if (inputType.getRank() == 0) {
+      Value input = op.getInput();
+      if (auto sumOp = input.getDefiningOp<ttnn::SumOp>()) {
+        llvm::errs() << "Fusing ttnn.SumOp into ttnn.AllReduceOp.\n" << sumOp << "\n"
+                     << op << "\n";
+        Value newAllReduceInput = sumOp.getInput();
+        rewriter.modifyOpInPlace(op, [&]() {
+          op.getOperation()->setOperand(0, newAllReduceInput);
+        });
+
+        if (sumOp.getOperation()->use_empty()) {
+          llvm::errs()
+              << "Removing ttnn.SumOp since it is not used anymore.\n";
+          rewriter.eraseOp(sumOp);
+        }
+        inputType = mlir::cast<RankedTensorType>(op.getInput().getType());
+        inputTypeShape.clear();
+        inputTypeShape.assign(inputType.getShape().begin(),
+                              inputType.getShape().end());
+      }
+    }
 
     // TODO(hongseok): Restore dynamic dimension selection once the issue
     // (https://github.com/tenstorrent/tt-metal/issues/19433) is resolved.
@@ -510,18 +537,21 @@ public:
     // If the target dimension is not evenly divisible by the number of
     // devices in the cluster, use the all-gather + local reduce breakdown
     // approach.
-    if (inputTypeShape[dimension] % meshShape[clusterAxis] != 0) {
-      // Estimate memory usage of AllGather + LocalReduce breakdown and check
-      // if it exceeds the allowed memory limit. This breakdown requires
-      // significantly more memory than ReduceScatter + AllGather due to
-      // internal padding and temporary buffers. To avoid potential memory
-      // blowup, enforce a size constraint based on DRAM capacity.
-      if (exceedsAllGatherReduceMemLimit(ttcore::getCurrentScopeSystemDesc(op),
-                                         inputType, meshShape[clusterAxis],
-                                         0.05)) {
-        return rewriteAsAllGatherLocalReduce(op, meshShape, rewriter);
-      }
-    }
+    // if (inputTypeShape[dimension] % meshShape[clusterAxis] != 0) {
+    //   // Estimate memory usage of AllGather + LocalReduce breakdown and check
+    //   // if it exceeds the allowed memory limit. This breakdown requires
+    //   // significantly more memory than ReduceScatter + AllGather due to
+    //   // internal padding and temporary buffers. To avoid potential memory
+    //   // blowup, enforce a size constraint based on DRAM capacity.
+    //   if (exceedsAllGatherReduceMemLimit(ttcore::getCurrentScopeSystemDesc(op),
+    //                                      inputType, meshShape[clusterAxis],
+    //                                      0.05)) {
+    //                                       llvm::errs() << "Exceeds memory limit for AllGather + LocalReduce breakdown. "
+    //                                       << "Using ReduceScatter + AllGather instead.\n" << op << "\n";
+    //     // If the memory limit is exceeded, we cannot use
+    //     return rewriteAsAllGatherLocalReduce(op, meshShape, rewriter);
+    //   }
+    // }
 
     // TODO(wooseoklee): Once it supports two dimensional tensor
     // (https://github.com/tenstorrent/tt-metal/issues/15010), we can remove
@@ -530,6 +560,8 @@ public:
       // We need to expand the current inputShape size to a tensor with
       // rank=4. We do this by adding leading 1's to the inputShape to create
       // a new shape with rank=4.
+      llvm::errs() << "Expanding input tensor to rank=4 for AllReduceOp.\n"
+               << op << "\n";
       uint32_t requiredOnesInput = 4 - inputTypeShape.size();
       llvm::SmallVector<int64_t> reshapedInputShape(requiredOnesInput, 1);
       reshapedInputShape.append(inputTypeShape);
@@ -537,8 +569,11 @@ public:
       ArrayAttr reshapedInputShapeAttr =
           rewriter.getI32ArrayAttr(llvm::SmallVector<int32_t>(
               reshapedInputShape.begin(), reshapedInputShape.end()));
-      auto reshapedInputType =
-          RankedTensorType::Builder(inputType).setShape(reshapedInputShape);
+          //           auto flattenedType = RankedTensorType::get(
+          // flattenedShape, originalResultType.getElementType(), originalResultType.getEncoding());
+      auto reshapedInputType =RankedTensorType::get(reshapedInputShape,
+                                                   inputType.getElementType(), inputType.getEncoding());
+          // RankedTensorType::Builder(inputType).setShape(reshapedInputShape);
 
       // Create a new reshape op.
       ttnn::ReshapeOp preReshapeOp = rewriter.create<ttnn::ReshapeOp>(
@@ -554,8 +589,9 @@ public:
       // original_tensor_shape / num_devices.
       reshapedInputShape[dimension] =
           reshapedInputShape[dimension] / meshShape[clusterAxis];
-      auto scatteredInputType =
-          RankedTensorType::Builder(inputType).setShape(reshapedInputShape);
+      auto scatteredInputType = RankedTensorType::get(reshapedInputShape,
+                                                   inputType.getElementType(), inputType.getEncoding());
+          // RankedTensorType::Builder(inputType).setShape(reshapedInputShape);
 
       // Create a new reduce scatter op.
       ttnn::ReduceScatterOp reduceScatterOp =
@@ -565,28 +601,74 @@ public:
               op.getReduceType(), dimension, clusterAxis);
 
       // We need to reshape the output to tensor rank=4 as well.
+      llvm::SmallVector<int64_t> reshapedAllgatherOutputShape(requiredOnesInput, 1);
+      reshapedAllgatherOutputShape.append(inputTypeShape);
       RankedTensorType outputType = mlir::cast<RankedTensorType>(op.getType());
       llvm::SmallVector<int64_t> outputTypeShape(outputType.getShape());
 
       uint32_t requiredOnesOutput = 4 - outputTypeShape.size();
       llvm::SmallVector<int64_t> reshapedOutputShape(requiredOnesOutput, 1);
-      reshapedOutputShape.append(outputTypeShape);
+      // reshapedOutputShape.append(outputTypeShape);
+      // reshapedOutputShape[dimension] =
+      //     reshapedInputShape[dimension] * meshShape[clusterAxis];
 
-      auto reshapedOutputType =
-          RankedTensorType::Builder(outputType).setShape(reshapedOutputShape);
+      auto reshapedOutputType =RankedTensorType::get(reshapedAllgatherOutputShape,
+                                                   outputType.getElementType(), outputType.getEncoding());
+          // RankedTensorType::Builder(outputType).setShape(reshapedAllgatherOutputShape);
       ArrayAttr reshapedOutputShapeAttr =
           rewriter.getI32ArrayAttr(llvm::SmallVector<int32_t>(
-              outputTypeShape.begin(), outputTypeShape.end()));
+              reshapedAllgatherOutputShape.begin(), reshapedAllgatherOutputShape.end()));
 
+
+              RankedTensorType originalGatherType = reshapedOutputType;
+
+      // 2. 원래 타입에서 shape와 element type 정보를 추출합니다.
+      llvm::ArrayRef<int64_t> shape = originalGatherType.getShape();
+      mlir::Type elementType = originalGatherType.getElementType();
+
+      // 3. 새로 적용하고 싶은 레이아웃 속성(Attribute)을 생성합니다.
+      //    (예시: RowMajor 레이아웃으로 변경)
+      auto newLayoutAttr = ttnn::LayoutAttr::get(rewriter.getContext(), ttnn::Layout::RowMajor);
+
+      // 4. shape와 element type은 유지하고, 인코딩만 새 레이아웃으로 교체하여
+      //    새로운 결과 타입을 생성합니다.
+      RankedTensorType newGatherTypeWithLayout = RankedTensorType::get(shape, elementType, newLayoutAttr);
+      
       // Create a new all gather op.
       ttnn::AllGatherOp allGatherOp = rewriter.create<ttnn::AllGatherOp>(
           ttmlir::utils::appendLocationSuffix(loc, "_allGather"),
-          Type(reshapedOutputType), reduceScatterOp.getResult(), deviceValue,
+          Type(newGatherTypeWithLayout), reduceScatterOp.getResult(), deviceValue,
           dimension, clusterAxis);
+      
+      // llvm::errs() << op << "\n" << "reshapedOutputShape: \n";
+      // for (auto dim : reshapedOutputShape) {
+      //   llvm::errs() << dim << " ";
+      // }
+      // llvm::errs() << " and result allGatherOp: \n";
+      // allGatherOp.dump();
 
-      rewriter.replaceOpWithNewOp<ttnn::ReshapeOp>(
-          op, Type(outputType), allGatherOp.getResult(),
-          reshapedOutputShapeAttr, /* memory_config */ nullptr);
+      if (outputType.getShape().size() == 0) {
+        llvm::SmallVector<int32_t> allGatherOutputDims;
+        for (size_t i = 0; i < reshapedOutputShape.size(); ++i) {
+          allGatherOutputDims.push_back(i);
+        }
+        ArrayAttr dimsToReduceAttr =
+            rewriter.getI32ArrayAttr(allGatherOutputDims);
+        auto newSumOp = rewriter.replaceOpWithNewOp<ttnn::SumOp>(op, Type(outputType),
+                                                 allGatherOp.getResult(), false,
+                                                 dimsToReduceAttr);
+    
+        llvm::errs() << "Replaced AllReduceOp with SumOp.\n" << newSumOp << "\n";
+
+      } else {
+        auto reshapeOp = rewriter.replaceOpWithNewOp<ttnn::ReshapeOp>(
+            op, Type(outputType), allGatherOp.getResult(),
+            reshapedOutputShapeAttr, /* memory_config */ ttnn::MemoryConfigAttr());
+
+        llvm::errs() << "Replaced AllReduceOp with ReshapeOp.\n" << reshapeOp
+                     << "\n";
+      }
+
     } else {
       // TODO(wooseoklee): Once ttnn supports all_reduce op
       // (https://github.com/tenstorrent/tt-metal/issues/13835), we can
@@ -612,6 +694,7 @@ public:
           op, op.getType(), reduceScatterOp.getResult(), deviceValue, dimension,
           clusterAxis);
     }
+    llvm::errs() << "\n\n\n\n\n";
     return success();
   }
 
@@ -727,6 +810,69 @@ private:
   }
 };
 
+class TTNNToLayoutOpWorkaroundOp : public OpRewritePattern<ttnn::ToLayoutOp> {
+public:
+  using OpRewritePattern<ttnn::ToLayoutOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ttnn::ToLayoutOp op,
+                                PatternRewriter &rewriter) const override {
+    // 1. ToLayoutOp의 입력을 정의하는 Op를 가져옵니다.
+    mlir::Operation *definingOp = op.getInput().getDefiningOp();
+
+    // 2. 만약 그 Op가 존재하고, 타입이 ttnn::AddOp라면 로직을 실행합니다.
+    if (definingOp && llvm::isa<ttnn::DivideOp>(definingOp)) {
+      auto addOp = llvm::cast<ttnn::DivideOp>(definingOp);
+
+      // 3. 리라이터의 삽입점을 AddOp 바로 뒤로 설정합니다.
+      rewriter.setInsertionPointAfter(addOp);
+
+      // 4. AddOp 결과의 타입, shape, 요소 개수를 가져옵니다.
+      auto originalResultType = 
+          mlir::dyn_cast<RankedTensorType>(addOp.getType());
+      if (!originalResultType) {
+        // RankedTensor가 아니면 패턴을 적용할 수 없습니다.
+        return failure();
+      }
+      llvm::ArrayRef<int64_t> originalShape = originalResultType.getShape();
+      int64_t numElements = originalResultType.getNumElements();
+
+      // llvm::errs() << "\n\n\n-----------------\n\n\nop : " << op << "\n" << " has encoding : " << originalResultType.getEncoding() << "\n------------------\n\n\n";
+                   
+
+      // 5. 첫 번째 ReshapeOp 생성: 원본 shape -> 1차원으로 펼치기
+      llvm::SmallVector<int64_t> flattenedShape = {numElements};
+      auto flattenedType = RankedTensorType::get(
+          flattenedShape, originalResultType.getElementType(), originalResultType.getEncoding());
+      ArrayAttr flattenedShapeAttr = rewriter.getI32ArrayAttr(
+          llvm::SmallVector<int32_t>(flattenedShape.begin(),
+                                    flattenedShape.end()));
+
+      auto reshapeTo1DOp = rewriter.create<ttnn::ReshapeOp>(
+          addOp.getLoc(), flattenedType, addOp.getResult(), flattenedShapeAttr,
+          /* memory_config */ nullptr);
+
+      // 6. 두 번째 ReshapeOp 생성: 1차원 -> 다시 원래 shape로 복원
+      ArrayAttr originalShapeAttr = rewriter.getI32ArrayAttr(
+          llvm::SmallVector<int32_t>(originalShape.begin(),
+                                    originalShape.end()));
+
+      auto reshapeBackOp = rewriter.create<ttnn::ReshapeOp>(
+          addOp.getLoc(), originalResultType, reshapeTo1DOp.getResult(),
+          originalShapeAttr,
+          /* memory_config */ nullptr);
+
+      // 7. 원래 ToLayoutOp의 입력을, 새로 만든 마지막 ReshapeOp의 결과로 교체합니다.
+      rewriter.modifyOpInPlace(op, [&]() {
+        op.getOperation()->setOperand(0, reshapeBackOp.getResult());
+      });
+
+      return success();
+    }
+
+    // AddOp가 아니면 아무것도 하지 않고 패턴 적용을 실패 처리합니다.
+    return failure();
+  }
+};
 // Pass to apply workarounds to the operands of TTNN operations.
 class TTNNWorkarounds : public impl::TTNNWorkaroundsBase<TTNNWorkarounds> {
 public:
@@ -736,7 +882,7 @@ public:
     if (decompositionWorkaroundsEnabled) {
       RewritePatternSet patterns(&getContext());
       patterns.add<
-          TTNNAllReduceWorkarounds, TTNNAllGatherWorkarounds,
+          TTNNAllReduceWorkarounds, TTNNAllGatherWorkarounds, TTNNToLayoutOpWorkaroundOp,
           workarounds::decomposition::ConcatOpDecompositionRewritePattern,
           workarounds::decomposition::TTNNReduceScatterWorkarounds,
           workarounds::decomposition::CumSumOpDimRewritePattern,
