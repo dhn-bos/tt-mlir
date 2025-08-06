@@ -7,4 +7,4 @@ builder.ttir.ttir\_utils
 
 .. autofunction:: builder.ttir.ttir_utils.run_ttir_pipeline
 
-.. autofunction:: builder.ttir.ttir_utils.compile_to_flatbuffer
+.. autofunction:: builder.ttir.ttir_utils.compile_ttir_to_flatbuffer

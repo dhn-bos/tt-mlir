@@ -20,7 +20,7 @@ ttrt query --save-artifacts
 
 ```python
 from builder.ttir.ttir_builder import TTIRBuilder
-from builder.ttir.ttir_utils import compile_to_flatbuffer
+from builder.ttir.ttir_utils import compile_ttir_to_flatbuffer
 ```
 
 ## Creating a TTIR module
@@ -436,10 +436,10 @@ module {
 
 ## Compiling into flatbuffer
 
-`compile_to_flatbuffer` compiles a TTIRBuilder function `fn` straight to flatbuffer. This decorator is mainly a wrapper around the following functions, with each next function called on the output of the last: `build_ttir_module`, `run_ttir_pipeline`, and `ttnn_to_flatbuffer_file` or `ttmetal_to_flatbuffer_file` as dictated by the `target` parameter.
+`compile_ttir_to_flatbuffer` compiles a TTIRBuilder function `fn` straight to flatbuffer. This decorator is mainly a wrapper around the following functions, with each next function called on the output of the last: `build_ttir_module`, `run_ttir_pipeline`, and `ttnn_to_flatbuffer_file` or `ttmetal_to_flatbuffer_file` as dictated by the `target` parameter.
 
 ```python
-def compile_to_flatbuffer(
+def compile_ttir_to_flatbuffer(
     fn: Callable,
     inputs_shapes: List[Shape],
     inputs_types: Optional[List[Union[torch.dtype, TypeInfo]]] = None,
@@ -464,7 +464,7 @@ Let's use our previous model function.
 ```python
 from builder.base.builder import Operand
 from builder.ttir.ttir_builder import TTIRBuilder
-from builder.ttir.ttir_utils import compile_to_flatbuffer
+from builder.ttir.ttir_utils import compile_ttir_to_flatbuffer
 
 shapes = [(32, 32), (32, 32), (32, 32)]
 
@@ -473,7 +473,7 @@ def model(in0: Operand, in1: Operand, in2: Operand, builder: TTIRBuilder):
     multiply_1 = builder.multiply(in1, add_0)
     return builder.multiply(multiply_1, in2)
 
-compile_to_flatbuffer(
+compile_ttir_to_flatbuffer(
     model,
     shapes,
     target="ttnn",
@@ -482,10 +482,10 @@ compile_to_flatbuffer(
 
 ### TTMetal example
 
-Let's once again use the same code for TTMetal that was used in the TTNN example but change the `target` to `"ttmetal"`. Just as with `run_ttir_pipeline`, only one or the other can be run on a module since `compile_to_flatbuffer` modifies the module in place.
+Let's once again use the same code for TTMetal that was used in the TTNN example but change the `target` to `"ttmetal"`. Just as with `run_ttir_pipeline`, only one or the other can be run on a module since `compile_ttir_to_flatbuffer` modifies the module in place.
 
 ```python
-compile_to_flatbuffer(
+compile_ttir_to_flatbuffer(
     model,
     shapes,
     target="ttmetal",
