@@ -8,6 +8,8 @@ from typing import Callable, List, Optional, Tuple
 from conftest import x86_only
 
 from builder.base.builder import Operand, Shape, TypeInfo
+from builder.stablehlo.stablehlo_utils import build_stablehlo_module
+from builder.base.utils import compile_to_flatbuffer
 from builder.ttir.ttir_builder import TTIRBuilder
 from builder.ttir.ttir_utils import compile_ttir_to_flatbuffer
 from test_utils import Marks, shape_str
@@ -2554,3 +2556,37 @@ def test_hoisted_dot_general(
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
     )
+
+
+def shlo_cbrt(
+    in0: Operand, builder: TTIRBuilder, unit_attrs: Optional[List[str]] = None
+):
+    return builder.shlo_cbrt(in0, unit_attrs=unit_attrs)
+
+
+def shlo_constant(
+    in0: Operand, builder: TTIRBuilder, unit_attrs: Optional[List[str]] = None
+):
+    return builder.sdy_constant(in0, value=0, unit_attrs=unit_attrs)
+
+
+def sdy_sharding_group(
+    in0: Operand, builder: TTIRBuilder, unit_attrs: Optional[List[str]] = None
+):
+    y = builder.shlo_cbrt(in0, unit_attrs=unit_attrs)
+    # z = sdy.MeshAttr.get()
+    return builder.sdy_sharding_group(y, 0, unit_attrs=unit_attrs)
+
+
+def main():
+    compile_to_flatbuffer(
+        shlo_cbrt,
+        inputs_shapes=[(128, 128)],
+        inputs_types=[torch.float32],
+        system_desc_path="ttrt-artifacts/system_desc.ttsys",
+        dialect="stablehlo",
+    )
+
+
+if __name__ == "__main__":
+    main()

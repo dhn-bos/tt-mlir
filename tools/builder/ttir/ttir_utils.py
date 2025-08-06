@@ -223,8 +223,8 @@ def build_ttir_module(
 
         if module_dump:
             with open(filename, "w") as f:
-                f.write(str(module))
-                print(module)
+                f.write(module.operation.get_asm(enable_debug_info=True))
+                print(module.operation.get_asm(enable_debug_info=True))
 
         return module, ttir_builder
 
@@ -288,6 +288,8 @@ def run_ttir_pipeline(
     if argument_types_string:
         pipeline_options.append("enable-const-eval=true")
 
+    print(module)
+    print(pipeline_options)
     # Now, pass it through the pipeline. Module gets modified in place.
     pipeline_fn(module, " ".join(pipeline_options))
 

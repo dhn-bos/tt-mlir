@@ -12,7 +12,7 @@ from enum import Enum, auto
 import re
 
 from ttmlir.ir import *
-from ttmlir.dialects import stablehlo, sdy
+from ttmlir.dialects import ttir, stablehlo, sdy
 
 from builder.base.builder import *
 
@@ -22,6 +22,17 @@ class StableHLOBuilder(Builder):
 
     def __init__(self, ctx: Context, location: Location):
         super().__init__(ctx, location)
+
+        # output golden info for populating shlo
+        self._output_info: Dict[Operation, (Shape, Type)] = {}
+        self._output_create_fn: Dict[Operation, Callable] = {}
+
+    def populate_goldens(self):
+        for op, output_info in self._output_info.items():
+            # print(op, output_info)
+            output = self._output_create_fn[op](*output_info)
+            golden = self._goldens[op]
+            self._override_golden(output, golden)
 
     # ----- Private Methods ----
     def _create_mesh_attr_from_ordered_dict(
@@ -33,6 +44,20 @@ class StableHLOBuilder(Builder):
             for axis_name, size in mesh_dict.items()
         ]
         return self.mesh_attr(axes)
+
+    def _empty(self, shape: Shape, data_type: Optional[Type] = None) -> OpView:
+        dtype = data_type if data_type is not None else self._get_default_dtype()
+        return self._create_empty_from_tensor_type(
+            shape, self._create_ranked_tensor_type(shape, dtype)
+        )
+
+    def _create_empty_from_tensor_type(
+        self, shape: Shape, tensor_type: RankedTensorType
+    ) -> OpView:
+        with self._ctx, self._loc:
+            op = ttir.EmptyOp(tensor_type)
+            self._generate_and_store_random_golden(op)
+            return op
 
     def _op_proxy(
         self,
@@ -107,6 +132,11 @@ class StableHLOBuilder(Builder):
                     op.operation.attributes[attr_name] = UnitAttr.get(self._ctx)
             self._id_golden_map[str(loc)] = golden
             self._store_golden(op, golden)
+            self._output_info[op] = (output_shape, output_type)
+            # ***** None might not work
+            self._output_create_fn[op] = (
+                output_create_fn if output_create_fn else self._empty
+            )
             return op
 
     def _eltwise_proxy(
@@ -187,3 +217,73 @@ class StableHLOBuilder(Builder):
         tensor_sharding_attr: sdy.TensorShardingAttr,
     ) -> sdy.ShardingConstraintOp:
         return sdy.ShardingConstraintOp(in0, tensor_sharding_attr)
+
+    def shlo_cbrt(
+        self,
+        in0: Operand,
+        unit_attrs: Optional[List[str]] = None,
+    ) -> OpView:
+        golden = self._get_golden_tensor(in0)
+        golden_sign = torch.sign(golden)
+        golden_cbrt = torch.pow(torch.abs(golden), 1 / 3)
+        return self._op_proxy(
+            torch.mul,
+            stablehlo.CbrtOp,
+            [in0],
+            golden_kwargs={"input": golden_sign, "other": golden_cbrt},
+            organize_golden_args=lambda i: 0,
+            unit_attrs=unit_attrs,
+        )
+
+    def sdy_constant(
+        self,
+        in0: Operand,
+        value,
+        unit_attrs: Optional[List[str]] = None,
+    ) -> OpView:
+        print(value)
+        shape = self._get_golden_tensor(in0).shape
+        # golden_sign = torch.sign(golden)
+        # golden_cbrt = torch.pow(torch.abs(golden), 1 / 3)
+        # value = DenseI32ArrayAttr.get([value])
+        return self._op_proxy(
+            torch.Tensor,
+            sdy.ConstantOp,
+            [],
+            stablehlo_kwargs={"value": [value]},
+            golden_kwargs={"data": [value]},
+            organize_golden_args=lambda i: 0,
+            unit_attrs=unit_attrs,
+        )
+
+    def sdy_mesh(
+        self,
+        sym_name: str,
+        mesh,  # MeshAttr,
+        unit_attrs: Optional[List[str]] = None,
+    ) -> OpView:
+        # print(value)
+        return self._op_proxy(
+            torch.Tensor,
+            sdy.MeshOp,
+            [],
+            stablehlo_kwargs={"mesh": mesh, "sym_name": sym_name},
+            # golden_kwargs={"data": value},
+            organize_golden_args=lambda i: 0,
+            unit_attrs=unit_attrs,
+        )
+
+    def sdy_sharding_group(
+        self,
+        in0: Operand,
+        group_id: int = 0,
+        unit_attrs: Optional[List[str]] = None,
+    ) -> OpView:
+        return self._op_proxy(
+            torch.Tensor,
+            sdy.ShardingGroupOp,
+            [in0],
+            stablehlo_kwargs={"group_id": group_id},
+            organize_golden_args=lambda i: 0,
+            unit_attrs=unit_attrs,
+        )

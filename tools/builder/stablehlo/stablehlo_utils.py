@@ -97,11 +97,7 @@ def build_stablehlo_module(
                         ).tensor
                     )
                 result = fn(*inputs, stablehlo_builder)
-                output_ops = result if hasattr(result, "__iter__") else (result,)
-                output_goldens = [
-                    stablehlo_builder._get_golden_tensor(op) for op in output_ops
-                ]
-                stablehlo_builder.set_graph_input_output(input_goldens, output_goldens)
+                stablehlo_builder.set_graph_input_output(input_goldens)
                 return result
 
         print(f"`{fn.__name__}` sucessfully transformed into a MLIR module.")
@@ -112,7 +108,16 @@ def build_stablehlo_module(
 
         if module_dump:
             with open(filename, "w") as f:
-                f.write(str(module))
-                print(module)
+                f.write(module.operation.get_asm(enable_debug_info=True))
+                print(module.operation.get_asm(enable_debug_info=True))
 
         return module, stablehlo_builder
+
+
+def _run_stablehlo_pipeline(
+    module: Module,
+    stablehlo_builder: StableHLOBuilder,
+    output_root: str = ".",
+    target: str = "ttnn",
+):
+    pass
