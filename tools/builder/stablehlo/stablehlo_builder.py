@@ -29,7 +29,6 @@ class StableHLOBuilder(Builder):
 
     def populate_goldens(self):
         for op, output_info in self._output_info.items():
-            # print(op, output_info)
             output = self._output_create_fn[op](*output_info)
             golden = self._goldens[op]
             self._override_golden(output, golden)
@@ -133,7 +132,6 @@ class StableHLOBuilder(Builder):
             self._id_golden_map[str(loc)] = golden
             self._store_golden(op, golden)
             self._output_info[op] = (output_shape, output_type)
-            # ***** None might not work
             self._output_create_fn[op] = (
                 output_create_fn if output_create_fn else self._empty
             )

@@ -10,7 +10,7 @@ from ttmlir.ir import *
 
 from builder.base.builder import Operand
 from builder.ttir.ttir_builder import TTIRBuilder
-from builder.ttir.ttir_utils import compile_ttir_to_flatbuffer
+from builder.ttir.ttir_utils import compile_to_flatbuffer
 
 
 @pytest.mark.fails_golden
@@ -43,7 +43,7 @@ def test_matmul_single_core_8otpc(
         return builder.matmul(in0, in1, unit_attrs=unit_attrs)
 
     options = [f"override-device-shape=1,1"]
-    compile_ttir_to_flatbuffer(
+    compile_to_flatbuffer(
         matmul,
         [lhs, rhs],
         target="ttmetal",
@@ -84,7 +84,7 @@ def test_matmul_multi_core_8otpc(
     ):
         return builder.matmul(in0, in1, unit_attrs=unit_attrs)
 
-    compile_ttir_to_flatbuffer(
+    compile_to_flatbuffer(
         matmul,
         [lhs, rhs],
         target="ttmetal",
@@ -137,7 +137,7 @@ def test_matmul_ttnn_shapes(
         f"max-dst-register-size-tiles={dst_register_size_tiles}",
         f"matmul-interchange=2,0,1",
     ]
-    compile_ttir_to_flatbuffer(
+    compile_to_flatbuffer(
         matmul_blocking,
         [lhs, rhs],
         target="ttmetal",

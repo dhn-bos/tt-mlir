@@ -112,12 +112,3 @@ def build_stablehlo_module(
                 print(module.operation.get_asm(enable_debug_info=True))
 
         return module, stablehlo_builder
-
-
-def _run_stablehlo_pipeline(
-    module: Module,
-    stablehlo_builder: StableHLOBuilder,
-    output_root: str = ".",
-    target: str = "ttnn",
-):
-    pass

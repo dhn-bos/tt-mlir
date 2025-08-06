@@ -9,7 +9,7 @@ from typing import List, Tuple
 
 from builder.base.builder import Operand, Shape
 from builder.ttir.ttir_builder import TTIRBuilder
-from builder.ttir.ttir_utils import compile_ttir_to_flatbuffer
+from builder.ttir.ttir_utils import compile_to_flatbuffer
 
 pytestmark = pytest.mark.n300
 
@@ -356,7 +356,7 @@ def test_llama_attention_1x2_tp_part1(
 
         return output83
 
-    compile_ttir_to_flatbuffer(
+    compile_to_flatbuffer(
         model_part1,
         shapes,
         dtypes,
@@ -465,7 +465,7 @@ def test_llama_attention_1x2_tp_part2(
 
         return output115
 
-    compile_ttir_to_flatbuffer(
+    compile_to_flatbuffer(
         model_part2,
         shapes,
         dtypes,

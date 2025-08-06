@@ -9,7 +9,7 @@ import re
 
 from builder.base.builder import Operand, Shape
 from builder.ttir.ttir_builder import TTIRBuilder
-from builder.ttir.ttir_utils import compile_ttir_to_flatbuffer
+from builder.ttir.ttir_utils import compile_to_flatbuffer
 import os
 
 
@@ -74,7 +74,7 @@ def test_conv2d_sharding(
             unit_attrs=unit_attrs,
         )
 
-    output_file_mlir = compile_ttir_to_flatbuffer(
+    output_file_mlir = compile_to_flatbuffer(
         conv2d,
         shapes,
         dtypes,

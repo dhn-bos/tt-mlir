@@ -12,7 +12,7 @@ from ttmlir.ir import *
 from builder.base.builder import Operand, Shape
 from builder.ttir.ttir_builder import TTIRBuilder
 from builder.ttir import ttir_golden
-from builder.ttir.ttir_utils import compile_ttir_to_flatbuffer
+from builder.ttir.ttir_utils import compile_to_flatbuffer
 
 from test_utils import Marks, shape_str
 
@@ -46,7 +46,7 @@ def test_tilize(shape: Shape, request):
 
         return from_device
 
-    compile_ttir_to_flatbuffer(
+    compile_to_flatbuffer(
         tilize,
         [shape],
         target="ttmetal",
@@ -95,7 +95,7 @@ def test_untilize(shape: Shape, request):
 
         return from_device
 
-    compile_ttir_to_flatbuffer(
+    compile_to_flatbuffer(
         untilize,
         [shape],
         target="ttmetal",
@@ -125,7 +125,7 @@ def test_tilize_untilize(shape: Shape, request):
         )
         return from_device
 
-    compile_ttir_to_flatbuffer(
+    compile_to_flatbuffer(
         tilize_untilize,
         [shape],
         target="ttmetal",
