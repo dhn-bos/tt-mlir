@@ -1288,6 +1288,131 @@ public:
 };
 } // namespace
 
+namespace {
+class ScatterOpConversionPattern : public OpConversionPattern<ttir::ScatterOp> {
+public:
+  using OpConversionPattern<ttir::ScatterOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ttir::ScatterOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value input = adaptor.getInput();
+    Value scatterIndices = adaptor.getScatterIndices();
+    Value update = adaptor.getUpdate();
+
+    auto inputType = cast<RankedTensorType>(input.getType());
+    auto updateType = cast<RankedTensorType>(update.getType());
+    auto indicesType = cast<RankedTensorType>(scatterIndices.getType());
+    auto resultType = dyn_cast<RankedTensorType>(
+        this->getTypeConverter()->convertType(op.getResult().getType()));
+    assert(resultType && "Result type must be a ranked tensor type.");
+
+    // TOSA scatter requires:
+    // 1. 3D input/update tensors
+    // 2. 2D indices tensor with i32 element type
+    Value input3D = input;
+    Value update3D = update;
+    Value indices2D = scatterIndices;
+    bool needsReshape = false;
+
+    // Helper function to create 3D version of a tensor
+    auto make3D = [&](Value tensor, RankedTensorType tensorType) -> Value {
+      if (tensorType.getRank() == 3) {
+        return tensor;
+      } else if (tensorType.getRank() == 2) {
+        // Add batch dimension of size 1 at the front
+        SmallVector<int64_t> newShape = {1};
+        newShape.append(tensorType.getShape().begin(),
+                        tensorType.getShape().end());
+        auto newType =
+            RankedTensorType::get(newShape, tensorType.getElementType());
+
+        // Create shape tensor for reshape
+        auto shapeType = tosa::shapeType::get(rewriter.getContext(), 3);
+        auto attr = rewriter.getIndexTensorAttr(newShape);
+        auto shapeOp =
+            rewriter.create<tosa::ConstShapeOp>(op.getLoc(), shapeType, attr);
+
+        return rewriter.create<tosa::ReshapeOp>(op.getLoc(), newType, tensor,
+                                                shapeOp);
+      } else {
+        // For other ranks, we'd need more complex logic, but for now assume
+        // 2D/3D
+        return tensor;
+      }
+    };
+
+    // Convert tensors to 3D if needed
+    if (inputType.getRank() != 3) {
+      input3D = make3D(input, inputType);
+      needsReshape = true;
+    }
+    if (updateType.getRank() != 3) {
+      update3D = make3D(update, updateType);
+    }
+
+    // Handle indices tensor: TOSA scatter expects 2D indices with i32 type
+    if (indicesType.getRank() == 3) {
+      // Reshape 3D indices to 2D by collapsing first two dimensions
+      auto shape = indicesType.getShape();
+      SmallVector<int64_t> newShape = {shape[0] * shape[1], shape[2]};
+      auto newType =
+          RankedTensorType::get(newShape, indicesType.getElementType());
+
+      auto shapeType = tosa::shapeType::get(rewriter.getContext(), 2);
+      auto attr = rewriter.getIndexTensorAttr(newShape);
+      auto shapeOp =
+          rewriter.create<tosa::ConstShapeOp>(op.getLoc(), shapeType, attr);
+
+      indices2D = rewriter.create<tosa::ReshapeOp>(op.getLoc(), newType,
+                                                   scatterIndices, shapeOp);
+    }
+
+    // Cast indices to i32 if needed
+    auto indices2DType = cast<RankedTensorType>(indices2D.getType());
+    if (!indices2DType.getElementType().isInteger(32)) {
+      auto i32Type = rewriter.getI32Type();
+      auto castedIndicesType =
+          RankedTensorType::get(indices2DType.getShape(), i32Type);
+      indices2D = rewriter.create<tosa::CastOp>(op.getLoc(), castedIndicesType,
+                                                indices2D);
+    }
+
+    // Determine the 3D result type for the scatter operation
+    auto input3DType = cast<RankedTensorType>(input3D.getType());
+
+    // TOSA scatter has a different operand order than TTIR scatter:
+    // tosa.scatter(values_in, indices, input) -> values_out
+    // where:
+    // - values_in = update tensor (values to scatter)
+    // - indices = scatter indices
+    // - input = tensor to scatter into
+    auto scatterResult = rewriter.create<tosa::ScatterOp>(
+        op.getLoc(), input3DType, update3D, indices2D, input3D);
+
+    Value finalResult = scatterResult.getResult();
+
+    // Reshape back to original dimensions if we added a batch dimension
+    if (needsReshape && resultType.getRank() != input3DType.getRank()) {
+      // Create shape tensor for reshape back to original
+      auto shapeType =
+          tosa::shapeType::get(rewriter.getContext(), resultType.getRank());
+      SmallVector<int64_t> originalShape(resultType.getShape().begin(),
+                                         resultType.getShape().end());
+      auto attr = rewriter.getIndexTensorAttr(originalShape);
+      auto shapeOp =
+          rewriter.create<tosa::ConstShapeOp>(op.getLoc(), shapeType, attr);
+
+      finalResult = rewriter.create<tosa::ReshapeOp>(op.getLoc(), resultType,
+                                                     finalResult, shapeOp);
+    }
+
+    rewriter.replaceOp(op, finalResult);
+    return success();
+  }
+};
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Linalg Conversions Patterns
 //===----------------------------------------------------------------------===//
@@ -1705,7 +1830,8 @@ void populateTTIRToTosaPatterns(MLIRContext *ctx, RewritePatternSet &patterns,
                CosOpConversionPattern, MatmulOpConversionPattern,
                GatherOpConversionPattern, LogicalNotOpConversionPattern,
                MaxOpConversionPattern, SumOpConversionPattern,
-               ReduceOrOpConversionPattern>(typeConverter, ctx);
+               ReduceOrOpConversionPattern, ScatterOpConversionPattern>(
+      typeConverter, ctx);
 
   // Special operations
   patterns.add<WhereOpConversionPattern, ReshapeOpConversionPattern,
