@@ -304,15 +304,15 @@ def compile_ttir_to_flatbuffer(
     target : *Literal["ttnn", "ttmetal", "ttnn-standalone"]*
         Either "ttnn", "ttmetal", or "ttnn-standalone". This controls which backend to use.
 
-    mesh_name : *str*, optional
+    mesh_name : *str*
         Name of the mesh to be used in the module. Default is "mesh".
 
-    mesh_dict : *OrderedDict[str, int]*, optional
+    mesh_dict : *OrderedDict[str, int]*
         Dictionary that defines the mesh shape, e.g. OrderedDict([("x", 1), ("y", 1)]).
-        Default is OrderedDict([("x", 1), ("y", 1)]).
 
-    module_dump : bool, optional
-        Set to True to print out generated TTIR MLIR module. Default is True.
+    module_dump : bool
+        Set to True to print out generated TTIR MLIR module.
+        Default is False.
 
     argument_types_string : *Optional[str]*, optional
         String defining argument types for constant evaluation. Default is None.
@@ -327,7 +327,7 @@ def compile_ttir_to_flatbuffer(
     system_desc_path : str, optional
         Path to the system descriptor file. Default is "ttrt-artifacts/system_desc.ttsys".
 
-    pipeline_options : *Optional[List[str]]*, optional
+    pipeline_options : *Optional[List[str]]*
         Pipeline options to be added to the pass. Default is None.
 
     print_ir : *Union[bool, str]*, optional
@@ -378,7 +378,7 @@ def build_stablehlo_module(
     mesh_name: str = "mesh",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = False,
-    test_base_base: Optional[str] = None,
+    test_base: Optional[str] = None,
     output_root: str = ".",
 ):
     """
