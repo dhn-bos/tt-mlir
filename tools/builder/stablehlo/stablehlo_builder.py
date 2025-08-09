@@ -24,6 +24,16 @@ class StableHLOBuilder(Builder):
     def __init__(self, ctx: Context, location: Location):
         super().__init__(ctx, location)
 
+        # output golden info for populating shlo
+        self._output_info: Dict[Operation, (Shape, Type)] = {}
+        self._output_create_fn: Dict[Operation, Callable] = {}
+
+    def populate_goldens(self):
+        for op, output_info in self._output_info.items():
+            output = self._output_create_fn[op](*output_info)
+            golden = self._goldens[op]
+            self._override_golden(output, golden)
+
     # ----- Private Methods ----
     def _create_mesh_attr_from_ordered_dict(
         self,
@@ -113,6 +123,10 @@ class StableHLOBuilder(Builder):
                     op.operation.attributes[attr_name] = UnitAttr.get(self._ctx)
             self._id_golden_map[str(loc)] = golden
             self._store_golden(op, golden)
+            self._output_info[op] = (output_shape, output_type)
+            self._output_create_fn[op] = (
+                output_create_fn if output_create_fn else self._empty
+            )
             return op
 
     def _eltwise_proxy(
@@ -302,6 +316,41 @@ class StableHLOBuilder(Builder):
             unreduced_axes,
         )
 
+    def tensor_sharding_per_value_attr(
+        self, shardings: List[sdy.TensorShardingAttr]
+    ) -> sdy.TensorShardingPerValueAttr:
+        """
+        Creates a tensor sharding per value attribute.
+        This attribute defines how each value in a tensor is sharded across the mesh.
+        Parameters
+        ----------
+        shardings : List[sdy.TensorShardingAttr]
+            A list of TensorShardingAttrs, one for each operand/result of an op.
+        Returns
+        -------
+        (*sdy.TensorShardingPerValueAttr*)
+            A tensor sharding per value attribute that describes how each value in a tensor is distributed across the mesh
+        """
+        return sdy.TensorShardingPerValueAttr.get(shardings)
+
+    def manual_axes_attr(
+        self,
+        axes: List[str],
+    ) -> sdy.ManualAxesAttr:
+        """
+        Creates a manual axes attribute.
+        This attribute defines a set of axes that can be used for manual computation or sharding.
+        Parameters
+        ----------
+        axes : List[str]
+            A list of axes on which a ManualComputationOp is manual
+        Returns
+        -------
+        (*sdy.ManualAxesAttr*)
+            A manual axes attribute representing the specified axes for manual computation or sharding
+        """
+        return sdy.ManualAxesAttr.get(axes)
+
     # ----- Public Shardy Op Generators ----
 
     def mesh(self, mesh_name: str, mesh_attr: sdy.MeshAttr) -> sdy.MeshOp:
@@ -348,3 +397,61 @@ class StableHLOBuilder(Builder):
             A sharding constraint operation that applies the specified sharding to the input tensor
         """
         return sdy.ShardingConstraintOp(in0, tensor_sharding_attr)
+
+    def manual_computation(
+        self,
+        results: List[Operand],
+        tensors: List[Operand],
+        in_shardings: sdy.TensorShardingPerValueAttr,
+        out_shardings: sdy.TensorShardingPerValueAttr,
+        manual_axes: sdy.ManualAxesAttr,
+    ) -> sdy.ManualComputationOp:
+        """
+        Creates a manual computation operation.
+        This operation enables multi-device parallelism with manual collectives by jumping into a region
+        written in terms of per-device local code with explicit collectives. The body is local with respect
+        to the manual_axes, while propagation occurs through the body on any free axes not in the manual_axes list.
+        Parameters
+        ----------
+        in_shardings : sdy.TensorShardingPerValueAttr
+            The tensor sharding per value attribute that defines how input tensors are sharded across the mesh
+        out_shardings : sdy.TensorShardingPerValueAttr
+            The tensor sharding per value attribute that defines how output tensors are sharded across the mesh
+        manual_axes : sdy.ManualAxesAttr
+            The manual axes attribute that specifies which axes are handled manually in the computation
+        Returns
+        -------
+        (*sdy.ManualComputationOp*)
+            A manual computation operation that encapsulates per-device local code with explicit collectives
+        """
+        return sdy.ManualComputationOp(
+            results_=results,
+            tensors=tensors,
+            in_shardings=in_shardings,
+            out_shardings=out_shardings,
+            manual_axes=manual_axes,
+        )
+
+    def reshard(self, in0: Operand, sharding: sdy.TensorShardingAttr) -> sdy.ReshardOp:
+        """
+        Creates a reshard operation.
+        This operation reshards the input tensor to a different sharding than its existing sharding.
+        Reshard operations are typically added during sharding propagation when a tensor needs to be
+        redistributed across the mesh with a different sharding pattern.
+        Parameters
+        ----------
+        in0 : Operand
+            The input tensor that needs to be resharded
+        sharding : sdy.TensorShardingAttr
+            The tensor sharding attribute that defines the target sharding for the input tensor
+        Returns
+        -------
+        (*sdy.ReshardOp*)
+            A reshard operation that redistributes the input tensor according to the specified sharding
+        """
+        # return sdy.ReshardOp(in0, sharding)
+        return self._op_proxy(
+            sdy.ReshardOp,
+            [in0],
+            stablehlo_kwargs={"sharding": sharding},
+        )

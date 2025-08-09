@@ -14,6 +14,8 @@ from builder.stablehlo.stablehlo_builder import StableHLOBuilder
 from builder.base.builder_utils import compile_stablehlo_to_flatbuffer
 from test_utils import Marks, shape_str
 
+pytestmark = pytest.mark.n300
+
 
 def sharding_constraint(
     in0: Operand,
@@ -60,6 +62,7 @@ def test_sharding_constraint(
         base=request.node.name,
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
+        mesh_dict=OrderedDict([("x", 1), ("y", 2)]),
     )
 
 
@@ -85,6 +88,7 @@ def reshard(
             ),
         ],
     )
+
     builder.sharding_constraint(in0, tensor_sharding_attr=tensor_sharding_attr)
     out_sharding = builder.tensor_sharding_attr(
         mesh_name="mesh",
@@ -103,6 +107,7 @@ def reshard(
             ),
         ],
     )
+    print(f"out_sharding: {out_sharding}")
     return builder.reshard(in0, sharding=out_sharding)
 
 
@@ -127,6 +132,7 @@ def test_reshard(
         base=request.node.name,
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
+        mesh_dict=OrderedDict([("x", 1), ("y", 2)]),
     )
 
 
@@ -201,4 +207,5 @@ def test_manual_computation(
         base=request.node.name,
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
+        mesh_dict=OrderedDict([("x", 1), ("y", 2)]),
     )
