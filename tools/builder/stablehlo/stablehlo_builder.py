@@ -449,7 +449,6 @@ class StableHLOBuilder(Builder):
         (*sdy.ReshardOp*)
             A reshard operation that redistributes the input tensor according to the specified sharding
         """
-        # return sdy.ReshardOp(in0, sharding)
         return self._op_proxy(
             sdy.ReshardOp,
             [in0],
