@@ -57,7 +57,7 @@ def test_sharding_constraint(
         test_fn,
         inputs_shapes=[shape, shape],
         inputs_types=[dtype, dtype],
-        base=request.node.name,
+        test_base=request.node.name,
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
     )
@@ -124,7 +124,7 @@ def test_reshard(
         test_fn,
         inputs_shapes=[shape],
         inputs_types=[dtype],
-        base=request.node.name,
+        test_base=request.node.name,
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
     )
@@ -198,7 +198,7 @@ def test_manual_computation(
         test_fn,
         inputs_shapes=[shape, shape],
         inputs_types=[dtype, dtype],
-        base=request.node.name,
+        test_base=request.node.name,
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
     )
