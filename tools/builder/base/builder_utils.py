@@ -114,7 +114,7 @@ def build_ttir_module(
     module_dump: bool = False,
     base: Optional[str] = None,
     output_root: str = ".",
-):
+) -> Tuple[Module, TTIRBuilder]:
     """
     Define a MLIR module specified as a python function.
 
@@ -508,9 +508,13 @@ def build_stablehlo_module(
                 stablehlo_builder.set_graph_input_output(input_goldens, output_goldens)
                 return result
 
+        print(f"`{fn.__name__}` successfully transformed into a MLIR module.")
+
+        print(module)
+
         stablehlo_pipeline(module)
 
-        print(f"`{fn.__name__}` successfully transformed into a MLIR module.")
+        print(f"`{fn.__name__}` stablehlo pipeline ran successfully.")
 
         base = fn.__name__ if base is None else base
 
