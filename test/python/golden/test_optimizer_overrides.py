@@ -83,7 +83,7 @@ def test_conv2d_sharding(
     "optimization_policy",
     [optimizer_overrides.MemoryLayoutAnalysisPolicyType.DFSharding],
 )
-def test_optimization_policiesDF(
+def test_optimization_policies(
     shapes: List[Shape],
     dtypes: List[torch.dtype],
     optimization_policy: optimizer_overrides.MemoryLayoutAnalysisPolicyType,
@@ -105,23 +105,23 @@ def test_optimization_policiesDF(
         system_desc_path=request.config.getoption("--sys-desc"),
         optimization_policy=optimization_policy,
     )
-    # if _is_opmodel_enabled():
-    #    check_overrides_policy(output_file_mlir)
+    if _is_opmodel_enabled():
+        check_overrides_policy(output_file_mlir, optimization_policy)
 
 
 l1 = {
-    # "buffer_type": "l1",#"l1",
+    "buffer_type": "l1",  # "l1",
     # "memory_layout": "tile",
     # "data_type": "f32",
     # "tensor_memory_layout": "interleaved"
-    "grid_shape": "[1,1]",
+    # "grid_shape": "[1,1]",
 }
 l1small = {
     # "buffer_type": "l1_small",#"l1",
     # "memory_layout": "row_major",
     # data_type": "bf16",
     # "tensor_memory_layout": "block_sharded"
-    "grid_shape": "[1,2]",
+    # "grid_shape": "[1,2]",
 }
 mem = {
     # "buffer_type": "system_memory",#"l1",
@@ -153,9 +153,9 @@ dram = {
 @pytest.mark.parametrize(
     "configs",
     [
-        None,
+        # None,
         l1,
-        l1small,
+        # l1small,
         # mem,
         # dram,
     ],
@@ -184,5 +184,9 @@ def test_output_layouts(
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
     )
-    # if _is_opmodel_enabled():
-    #    check_output_layouts(output_file_mlir, op_name, {"buffer_type": "l1"})
+    if _is_opmodel_enabled():
+        check_output_layouts(
+            output_file_mlir,
+            "multiply",
+            {"tensor_memory_layout": "width_sharded", "buffer_type": "l1"},
+        )
