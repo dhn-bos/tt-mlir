@@ -90,12 +90,9 @@ def _optimizations_to_str(optimization_policy, builder):
     override_handler = optimizer_overrides.OptimizerOverridesHandler()
     # Parse optimization policy from optimization_options.
     if optimization_policy:
-        override_handler.set_enable_optimizer(True)
-        override_handler.set_enable_memory_layout_analysis(True)
         override_handler.set_memory_layout_analysis_policy(optimization_policy)
-    else:
-        override_handler.set_enable_optimizer(True)
-        override_handler.set_enable_memory_layout_analysis(True)
+    override_handler.set_enable_optimizer(True)
+    override_handler.set_enable_memory_layout_analysis(True)
 
     # Add any op-level overrides to override_handler
     for op_loc, param in builder._output_layout_params.items():
