@@ -9,10 +9,13 @@ import re
 
 from ttmlir import optimizer_overrides
 from builder.base.builder import Operand, Shape
+from builder.base.builder_utils import _is_opmodel_enabled
 from builder.ttir.ttir_builder import TTIRBuilder
 
 
 def check_sharded_input_output(mlir_file: str, op_name: str):
+    if not _is_opmodel_enabled():
+        return
     sharded_layouts = []
     with open(mlir_file, "r") as f:
         for line in f:
@@ -33,6 +36,8 @@ def check_sharded_input_output(mlir_file: str, op_name: str):
 def check_overrides_policy(
     mlir_file: str, policy: optimizer_overrides.MemoryLayoutAnalysisPolicyType
 ):
+    if not _is_opmodel_enabled():
+        return
     if policy == optimizer_overrides.MemoryLayoutAnalysisPolicyType.BFInterleaved:
         # BFInterleaved policy uses L1 memory layout, and is the only non-default policy supported for now
         memory_layout = "l1"
@@ -57,6 +62,8 @@ def check_overrides_policy(
 
 
 def check_output_layouts(mlir_file: str, op_name: str, configs: dict):
+    if not _is_opmodel_enabled():
+        return
     output_layout_override = optimizer_overrides.OutputLayoutOverrideParams()
     layouts = []
 

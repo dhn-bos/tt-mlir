@@ -74,7 +74,7 @@ def _is_opmodel_enabled() -> bool:
         for line in f:
             if "TTMLIR_ENABLE_OPMODEL:BOOL=OFF" in line:
                 print(
-                    "CMake flag `TTMLIR_ENABLE_OPMODEL` is not on. Please enable it in CMake."
+                    "Enable CMake flag `TTMLIR_ENABLE_OPMODEL` to run optimizer overrides. Skipping overrides"
                 )
                 return False
     return True

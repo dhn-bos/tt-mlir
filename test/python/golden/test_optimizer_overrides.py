@@ -105,8 +105,7 @@ def test_optimization_policies(
         system_desc_path=request.config.getoption("--sys-desc"),
         optimization_policy=optimization_policy,
     )
-    if _is_opmodel_enabled():
-        check_overrides_policy(output_file_mlir, optimization_policy)
+    check_overrides_policy(output_file_mlir, optimization_policy)
 
 
 @pytest.mark.subprocess
@@ -145,9 +144,8 @@ def test_output_layouts(
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
     )
-    if _is_opmodel_enabled():
-        check_output_layouts(
-            output_file_mlir,
-            "multiply",
-            configs,
-        )
+    check_output_layouts(
+        output_file_mlir,
+        "multiply",
+        configs,
+    )
