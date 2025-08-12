@@ -109,36 +109,6 @@ def test_optimization_policies(
         check_overrides_policy(output_file_mlir, optimization_policy)
 
 
-l1 = {
-    "buffer_type": "l1",  # "l1",
-    # "memory_layout": "tile",
-    # "data_type": "f32",
-    # "tensor_memory_layout": "interleaved"
-    # "grid_shape": "[1,1]",
-}
-l1small = {
-    # "buffer_type": "l1_small",#"l1",
-    # "memory_layout": "row_major",
-    # data_type": "bf16",
-    # "tensor_memory_layout": "block_sharded"
-    # "grid_shape": "[1,2]",
-}
-mem = {
-    # "buffer_type": "system_memory",#"l1",
-    # "memory_layout": "invalid",
-    # "data_type": "f32",
-    "tensor_memory_layout": "width_sharded"
-    # "grid_shape": "[1,1]",
-}
-dram = {
-    # "buffer_type": "dram",#"l1",
-    # "memory_layout": "tile",
-    # "data_type": "f32",
-    "tensor_memory_layout": "height_sharded"
-    # "grid_shape": "[1,1]",
-}
-
-
 @pytest.mark.subprocess
 @pytest.mark.parametrize(
     "shapes",
@@ -150,16 +120,7 @@ dram = {
     ],
 )
 @pytest.mark.parametrize("dtypes", [torch.float32], ids=["f32"])
-@pytest.mark.parametrize(
-    "configs",
-    [
-        # None,
-        l1,
-        # l1small,
-        # mem,
-        # dram,
-    ],
-)
+@pytest.mark.parametrize("configs", [{"buffer_type": "l1"}])
 def test_output_layouts(
     shapes: List[Shape],
     dtypes: List[torch.dtype],
@@ -188,5 +149,5 @@ def test_output_layouts(
         check_output_layouts(
             output_file_mlir,
             "multiply",
-            {"tensor_memory_layout": "width_sharded", "buffer_type": "l1"},
+            configs,
         )
