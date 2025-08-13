@@ -2793,7 +2793,6 @@ class TTIRBuilder(Builder):
             },
             organize_ttir_args=lambda i, o, _: (self._get_type(o), i[0], i[1], o),
             unit_attrs=unit_attrs,
-            output_type=output_type,
         )
 
     def conv_transpose2d(
