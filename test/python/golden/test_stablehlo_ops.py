@@ -40,7 +40,7 @@ def test_binary_ops(
         test_fn,
         inputs_shapes=[shape, shape],
         inputs_types=[dtype, dtype],
-        test_base=request.node.name,
+        base=request.node.name,
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
     )

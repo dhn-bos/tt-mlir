@@ -258,8 +258,8 @@ def compile_ttir_to_flatbuffer(
     fn: Callable,
     inputs_shapes: List[Shape],
     inputs_types: Optional[List[Union[torch.dtype, TypeInfo]]] = None,
-    system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
-    base: str = "test",
+    system_desc_path: Optional[str] = None,
+    test_base: str = "test",
     output_root: str = ".",
     target: Literal["ttnn", "ttmetal", "ttnn-standalone"] = "ttnn",
     mesh_name: str = "mesh",
@@ -295,8 +295,8 @@ def compile_ttir_to_flatbuffer(
         `len(inputs_shapes) == len(inputs_types)` must be true.
         Default is None.
 
-    base : str
-        The string to be used as the base name for dumped files throughout the
+    test_base : str
+        The string to be used as the test_base name for dumped files throughout the
         process. If `None` is provided, then the `__name__` of `fn` will be used.
 
     output_root : str
@@ -324,7 +324,7 @@ def compile_ttir_to_flatbuffer(
         - A str: "ttir-lower-to-layout,ttir-bufferization-pipeline"
 
     system_desc_path : str, optional
-        Path to the system descriptor file. Default is "ttrt-artifacts/system_desc.ttsys".
+        Path to the system descriptor file
 
     pipeline_options : *Optional[List[str]]*, optional
         Pipeline options to be added to the pass. Default is None.
@@ -347,7 +347,6 @@ def compile_ttir_to_flatbuffer(
         fn,
         inputs_shapes,
         inputs_types,
-        base=base,
         mesh_name=mesh_name,
         mesh_dict=mesh_dict,
         module_dump=module_dump,
@@ -358,7 +357,7 @@ def compile_ttir_to_flatbuffer(
         module,
         builder,
         system_desc_path=system_desc_path,
-        base=base,
+        test_base=test_base,
         output_root=output_root,
         target=target,
         mesh_dict=mesh_dict,
@@ -527,8 +526,8 @@ def compile_stablehlo_to_flatbuffer(
     fn: Callable,
     inputs_shapes: List[Shape],
     inputs_types: Optional[List[Union[torch.dtype, TypeInfo]]] = None,
-    system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
-    base: str = "test",
+    system_desc_path: Optional[str] = None,
+    test_base: str = "test",
     output_root: str = ".",
     target: Literal["ttnn", "ttmetal", "ttnn-standalone"] = "ttnn",
     mesh_name: str = "mesh",
@@ -561,8 +560,8 @@ def compile_stablehlo_to_flatbuffer(
     system_desc_path : str, optional
         Path to the system descriptor file
 
-    base : str, optional
-        The string to be used as the base name for dumped files
+    test_base : str, optional
+        The string to be used as the test_base name for dumped files
 
     output_root : str, optional
         The path to dump all generated files under
@@ -610,7 +609,6 @@ def compile_stablehlo_to_flatbuffer(
         fn,
         inputs_shapes,
         inputs_types,
-        base=base,
         mesh_name=mesh_name,
         mesh_dict=mesh_dict,
         module_dump=module_dump,
@@ -622,7 +620,7 @@ def compile_stablehlo_to_flatbuffer(
     print(module)
 
     filename = _get_target_path(
-        output_root, "stablehlo-builder", base + "_ttir.mlir", base
+        output_root, "stablehlo-builder", test_base + "_ttir.mlir", test_base
     )
     if module_dump:
         with open(filename, "w") as f:
@@ -632,7 +630,7 @@ def compile_stablehlo_to_flatbuffer(
         module,
         builder,
         system_desc_path=system_desc_path,
-        base=base,
+        test_base=test_base,
         output_root=output_root,
         builder_dir="stablehlo-builder",
         target=target,
@@ -648,8 +646,8 @@ def compile_stablehlo_to_flatbuffer(
 def compile_ttir_module_to_flatbuffer(
     module: Module,
     builder: Union[TTIRBuilder, StableHLOBuilder],
-    system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
-    base: str = "test",
+    system_desc_path: Optional[str] = None,
+    test_base: str = "test",
     output_root: str = ".",
     builder_dir: str = "ttir-builder",
     target: Literal["ttnn", "ttmetal", "ttnn-standalone"] = "ttnn",
@@ -676,10 +674,10 @@ def compile_ttir_module_to_flatbuffer(
         The builder instance containing golden reference values
 
     system_desc_path : str, optional
-        Path to the system descriptor file. Default is "ttrt-artifacts/system_desc.ttsys"
+        Path to the system descriptor file
 
-    base : str, optional
-        The string to be used as the base name for dumped files. Default is "test"
+    test_base : str, optional
+        The string to be used as the test_base name for dumped files. Default is "test"
 
     output_root : str, optional
         The path to dump all generated files under
@@ -756,7 +754,7 @@ def compile_ttir_module_to_flatbuffer(
         raise ValueError("Unsupported target: " + target)
 
     output_file_mlir = _get_target_path(
-        output_root, builder_dir, base + mlir_suffix, base
+        output_root, builder_dir, test_base + mlir_suffix, test_base
     )
     output_file_fbb = ".".join([output_file_mlir, target_extension])
 
