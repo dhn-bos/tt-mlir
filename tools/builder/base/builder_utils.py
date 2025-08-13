@@ -11,7 +11,7 @@ from typing import Callable, List, Optional, Tuple, Union, Literal, Dict
 from collections import OrderedDict
 
 from ttmlir.ir import *
-from ttmlir.dialects import func, sdy
+from ttmlir.dialects import func
 from ttmlir.passmanager import PassManager
 from ttmlir.passes import (
     tt_populate_argument_types,
@@ -32,8 +32,8 @@ from builder.stablehlo.stablehlo_builder import StableHLOBuilder
 # ----- Private APIs -----
 
 
-def _get_target_path(output_path, filename, target):
-    target_dir = os.path.join(output_path, "builder-artifacts", target)
+def _get_target_path(output_path, builder_dir, filename, target):
+    target_dir = os.path.join(output_path, "builder-artifacts", builder_dir, target)
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
     return os.path.join(target_dir, filename)
@@ -112,7 +112,7 @@ def build_ttir_module(
     mesh_name: str = "mesh",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = False,
-    test_base: Optional[str] = None,
+    base: Optional[str] = None,
     output_root: str = ".",
 ) -> Tuple[Module, TTIRBuilder]:
     """
@@ -142,7 +142,7 @@ def build_ttir_module(
     module_dump : bool
         Set to True to print out generated MLIR module.
 
-    test_base : *Optional[str]*
+    base : *Optional[str]*
         Output file name
 
     output_root: str = ".",
@@ -240,9 +240,11 @@ def build_ttir_module(
 
         print(f"`{fn.__name__}` successfully transformed into a MLIR module.")
 
-        test_base = fn.__name__ if test_base is None else test_base
+        base = fn.__name__ if base is None else base
 
-        filename = _get_target_path(output_root, test_base + "_ttir.mlir", test_base)
+        filename = _get_target_path(
+            output_root, "ttir-builder", base + "_ttir.mlir", base
+        )
 
         if module_dump:
             with open(filename, "w") as f:
@@ -257,7 +259,7 @@ def compile_ttir_to_flatbuffer(
     inputs_shapes: List[Shape],
     inputs_types: Optional[List[Union[torch.dtype, TypeInfo]]] = None,
     system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
-    test_base: str = "test",
+    base: str = "test",
     output_root: str = ".",
     target: Literal["ttnn", "ttmetal", "ttnn-standalone"] = "ttnn",
     mesh_name: str = "mesh",
@@ -293,8 +295,8 @@ def compile_ttir_to_flatbuffer(
         `len(inputs_shapes) == len(inputs_types)` must be true.
         Default is None.
 
-    test_base : str
-        The string to be used as the test_base name for dumped files throughout the
+    base : str
+        The string to be used as the base name for dumped files throughout the
         process. If `None` is provided, then the `__name__` of `fn` will be used.
 
     output_root : str
@@ -304,15 +306,12 @@ def compile_ttir_to_flatbuffer(
     target : *Literal["ttnn", "ttmetal", "ttnn-standalone"]*
         Either "ttnn", "ttmetal", or "ttnn-standalone". This controls which backend to use.
 
-    mesh_name : *str*
+    mesh_name : *str*, optional
         Name of the mesh to be used in the module. Default is "mesh".
 
-    mesh_dict : *OrderedDict[str, int]*
+    mesh_dict : *OrderedDict[str, int]*, optional
         Dictionary that defines the mesh shape, e.g. OrderedDict([("x", 1), ("y", 1)]).
-
-    module_dump : bool
-        Set to True to print out generated TTIR MLIR module.
-        Default is False.
+        Default is OrderedDict([("x", 1), ("y", 1)]).
 
     argument_types_string : *Optional[str]*, optional
         String defining argument types for constant evaluation. Default is None.
@@ -327,7 +326,7 @@ def compile_ttir_to_flatbuffer(
     system_desc_path : str, optional
         Path to the system descriptor file. Default is "ttrt-artifacts/system_desc.ttsys".
 
-    pipeline_options : *Optional[List[str]]*
+    pipeline_options : *Optional[List[str]]*, optional
         Pipeline options to be added to the pass. Default is None.
 
     print_ir : *Union[bool, str]*, optional
@@ -348,7 +347,7 @@ def compile_ttir_to_flatbuffer(
         fn,
         inputs_shapes,
         inputs_types,
-        test_base=test_base,
+        base=base,
         mesh_name=mesh_name,
         mesh_dict=mesh_dict,
         module_dump=module_dump,
@@ -359,7 +358,7 @@ def compile_ttir_to_flatbuffer(
         module,
         builder,
         system_desc_path=system_desc_path,
-        test_base=test_base,
+        base=base,
         output_root=output_root,
         target=target,
         mesh_dict=mesh_dict,
@@ -378,7 +377,7 @@ def build_stablehlo_module(
     mesh_name: str = "mesh",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = False,
-    test_base: Optional[str] = None,
+    base: Optional[str] = None,
     output_root: str = ".",
 ):
     """
@@ -408,7 +407,7 @@ def build_stablehlo_module(
     module_dump : bool
         Set to True to print out generated MLIR module.
 
-    test_base : *Optional[str]*
+    base : *Optional[str]*
         Output file name
 
     output_root: str = ".",
@@ -510,15 +509,11 @@ def build_stablehlo_module(
 
         print(f"`{fn.__name__}` successfully transformed into a MLIR module.")
 
-        print(module)
+        base = fn.__name__ if base is None else base
 
-        stablehlo_pipeline(module)
-
-        print(f"`{fn.__name__}` stablehlo pipeline ran successfully.")
-
-        test_base = fn.__name__ if test_base is None else test_base
-
-        filename = _get_target_path(output_root, test_base + "_shlo.mlir", test_base)
+        filename = _get_target_path(
+            output_root, "stablehlo-builder", base + "_shlo.mlir", base
+        )
 
         if module_dump:
             with open(filename, "w") as f:
@@ -533,7 +528,7 @@ def compile_stablehlo_to_flatbuffer(
     inputs_shapes: List[Shape],
     inputs_types: Optional[List[Union[torch.dtype, TypeInfo]]] = None,
     system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
-    test_base: str = "test",
+    base: str = "test",
     output_root: str = ".",
     target: Literal["ttnn", "ttmetal", "ttnn-standalone"] = "ttnn",
     mesh_name: str = "mesh",
@@ -566,8 +561,8 @@ def compile_stablehlo_to_flatbuffer(
     system_desc_path : str, optional
         Path to the system descriptor file
 
-    test_base : str, optional
-        The string to be used as the test_base name for dumped files
+    base : str, optional
+        The string to be used as the base name for dumped files
 
     output_root : str, optional
         The path to dump all generated files under
@@ -615,18 +610,20 @@ def compile_stablehlo_to_flatbuffer(
         fn,
         inputs_shapes,
         inputs_types,
-        test_base=test_base,
+        base=base,
         mesh_name=mesh_name,
         mesh_dict=mesh_dict,
         module_dump=module_dump,
         output_root=output_root,
     )
-
+    stablehlo_pipeline(module)
+    print(module)
     stablehlo_to_ttir_pipeline(module)
     print(module)
-    builder.populate_goldens()
 
-    filename = _get_target_path(output_root, test_base + "_ttir.mlir", test_base)
+    filename = _get_target_path(
+        output_root, "stablehlo-builder", base + "_ttir.mlir", base
+    )
     if module_dump:
         with open(filename, "w") as f:
             f.write(str(module))
@@ -635,8 +632,9 @@ def compile_stablehlo_to_flatbuffer(
         module,
         builder,
         system_desc_path=system_desc_path,
-        test_base=test_base,
+        base=base,
         output_root=output_root,
+        builder_dir="stablehlo-builder",
         target=target,
         mesh_dict=mesh_dict,
         module_dump=module_dump,
@@ -651,8 +649,9 @@ def compile_ttir_module_to_flatbuffer(
     module: Module,
     builder: Union[TTIRBuilder, StableHLOBuilder],
     system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
-    test_base: str = "test",
+    base: str = "test",
     output_root: str = ".",
+    builder_dir: str = "ttir-builder",
     target: Literal["ttnn", "ttmetal", "ttnn-standalone"] = "ttnn",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = True,
@@ -679,8 +678,8 @@ def compile_ttir_module_to_flatbuffer(
     system_desc_path : str, optional
         Path to the system descriptor file. Default is "ttrt-artifacts/system_desc.ttsys"
 
-    test_base : str, optional
-        The string to be used as the test_base name for dumped files. Default is "test"
+    base : str, optional
+        The string to be used as the base name for dumped files. Default is "test"
 
     output_root : str, optional
         The path to dump all generated files under
@@ -756,7 +755,9 @@ def compile_ttir_module_to_flatbuffer(
     else:
         raise ValueError("Unsupported target: " + target)
 
-    output_file_mlir = _get_target_path(output_root, test_base + mlir_suffix, test_base)
+    output_file_mlir = _get_target_path(
+        output_root, builder_dir, base + mlir_suffix, base
+    )
     output_file_fbb = ".".join([output_file_mlir, target_extension])
 
     # Compile TTIR MLIR -> TT{Metal,NN} MLIR
