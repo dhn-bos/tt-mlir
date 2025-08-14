@@ -535,7 +535,8 @@ def compile_stablehlo_to_flatbuffer(
     module_dump: bool = True,
     argument_types_string: Optional[str] = None,
     custom_pipeline: Optional[Union[Callable, str]] = None,
-    pipeline_options: Optional[List[str]] = None,
+    ttir_pipeline_options: Optional[List[str]] = None,
+    shlo_pipeline_options: Optional[List[str]] = None,
     print_ir: Union[bool, str] = False,
 ):
     """
@@ -614,9 +615,15 @@ def compile_stablehlo_to_flatbuffer(
         module_dump=module_dump,
         output_root=output_root,
     )
-    stablehlo_pipeline(module)
+
+    if shlo_pipeline_options is None:
+        shlo_pipeline_options = []
+
+    stablehlo_pipeline(module, " ".join(shlo_pipeline_options))
+    print(f"`{fn.__name__}` successfully ran stablehlo-pipeline.")
     print(module)
     stablehlo_to_ttir_pipeline(module)
+    print(f"`{fn.__name__}` successfully transformed into a TTIR MLIR module.")
     print(module)
 
     filename = _get_target_path(
@@ -638,7 +645,7 @@ def compile_stablehlo_to_flatbuffer(
         module_dump=module_dump,
         argument_types_string=argument_types_string,
         custom_pipeline=custom_pipeline,
-        pipeline_options=pipeline_options,
+        pipeline_options=ttir_pipeline_options,
         print_ir=print_ir,
     )
 
