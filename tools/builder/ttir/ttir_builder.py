@@ -146,6 +146,13 @@ class TTIRBuilder(Builder):
                     )
                 elif not output_type:
                     output_type = self._default_type
+            else:
+                assert (
+                    output_shape is not None
+                ), "Output shape must be provided if skipping golden"
+                assert (
+                    output_type is not None
+                ), "Output type must be provided if skipping golden"
 
             if output_create_fn:
                 output = output_create_fn(output_shape, output_type)
