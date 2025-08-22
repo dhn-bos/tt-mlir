@@ -474,7 +474,7 @@ TTNNOperandsWorkaroundsFactory::createTanhOpOperandsWorkarounds() {
 }
 
 // Factory method to create a set of workarounds for ArgMax op operands.
-// Input tensor must have BFLOAT16 data type and ROW_MAJOR layout.
+// Input tensor must have ROW_MAJOR layout.
 // No need for data type workaround for output tensor; only layout workaround is
 // required to match original layout.
 // tt-metal specs:
@@ -483,10 +483,6 @@ TTNNOperandsWorkarounds
 TTNNOperandsWorkaroundsFactory::createArgMaxOpOperandsWorkarounds() {
   wa::TTNNOperandWorkarounds rowMajorLayoutWorkaround;
   rowMajorLayoutWorkaround.tensorLayoutWorkaround = Layout::RowMajor;
-  wa::TTNNOperandWorkarounds rowMajorLayoutBF16Workaround;
-  rowMajorLayoutBF16Workaround.tensorLayoutWorkaround = Layout::RowMajor;
-  rowMajorLayoutBF16Workaround.tensorDataTypeWorkaround =
-      mlir::tt::ttcore::DataType::BFloat16;
 
   wa::TTNNOperandWorkarounds rowMajorLayoutUint32Workaround;
   rowMajorLayoutUint32Workaround.tensorLayoutWorkaround = Layout::RowMajor;
@@ -494,7 +490,7 @@ TTNNOperandsWorkaroundsFactory::createArgMaxOpOperandsWorkarounds() {
       mlir::tt::ttcore::DataType::UInt32;
 
   return wa::TTNNOperandsWorkarounds::createEmptyTTNNOperandsWorkarounds()
-      .addInputOperandWorkaround(rowMajorLayoutBF16Workaround)
+      .addInputOperandWorkaround(rowMajorLayoutWorkaround)
       .addOutputOperandWorkaround(rowMajorLayoutUint32Workaround);
 }
 
