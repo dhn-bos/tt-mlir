@@ -1,0 +1,44 @@
+include "ttmlir/Target/Common/types.fbs";
+include "ttmlir/Target/TTNN/types.fbs";
+
+namespace tt.target.ttnn;
+
+table KernelCBFormat {
+  page_size: uint32;
+  buffer_index: uint32;
+  dtype: DataType;
+}
+
+table KernelCB {
+  total_size: uint32;
+  core_range: tt.target.ttnn.CoreRange;
+  kernel_format: KernelCBFormat;
+}
+
+table ComputeKernelRef {
+  symbol_ref: string;
+}
+table ReaderKernelRef {
+  symbol_ref: string;
+}
+table WriterKernelRef {
+  symbol_ref: string;
+}
+
+union Kernel {
+  ComputeKernelRef,
+  ReaderKernelRef,
+  WriterKernelRef
+}
+
+table GenericProgram {
+  cbs: [KernelCB];
+  kernels: [Kernel];
+}
+
+table GenericOp {
+  inputs: [tt.target.ttnn.TensorRef];
+  program: GenericProgram;
+  memory_config: tt.target.ttnn.MemoryConfig;
+  out: tt.target.ttnn.TensorRef;
+}

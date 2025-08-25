@@ -1960,6 +1960,21 @@ createOp(FlatbufferObjectCache &cache, ConcatenateHeadsOp op) {
                                                       memoryConfig);
 }
 
+::flatbuffers::Offset<::tt::target::ttnn::GenericOp>
+createOp(FlatbufferObjectCache &cache, GenericOp op) {
+  std::vector<::flatbuffers::Offset<::tt::target::ttnn::TensorRef>> inputs;
+  for (auto input : op.getInputs()) {
+    inputs.push_back(cache.at<::tt::target::ttnn::TensorRef>(
+        getOperandThroughDPSOps(input)));
+  }
+  auto out = cache.getOrCreate(op.getResult(), tensorValueToFlatbuffer,
+                               kHostAllocatedSize);
+  auto program = cache.at<::tt::target::ttnn::GenericProgram>(op.getProgram());
+  auto memoryConfig = getMemoryConfigIfNeeded(cache, op);
+  return ::tt::target::ttnn::CreateGenericOpDirect(*cache.fbb, &inputs, program,
+                                                   memoryConfig, out);
+}
+
 ::flatbuffers::Offset<::tt::target::ttnn::Operation>
 emitTTNNOperation(FlatbufferObjectCache &cache, Operation *op,
                   const llvm::StringMap<uint32_t> &programIndexMap,
@@ -2476,6 +2491,10 @@ emitTTNNOperation(FlatbufferObjectCache &cache, Operation *op,
       concatenateHeadsOp) {
     return createOperation(cache, createOp(cache, concatenateHeadsOp),
                            debugString, locInfo);
+  }
+  if (auto genericOp = dyn_cast<GenericOp>(op); genericOp) {
+    return createOperation(cache, createOp(cache, genericOp), debugString,
+                           locInfo);
   }
 
   llvm_unreachable("unhandled op in emitTTNNOperation");

@@ -1175,6 +1175,10 @@ getOpOutputRef(OpContext opContextHandle,
                     opContext.type_type())]);
     return std::nullopt;
   }
+  case ::tt::target::ttnn::OpType::GenericOp: {
+    tensorRef = opContext.type_as_GenericOp()->out();
+    break;
+  }
   case ::tt::target::ttnn::OpType::NONE: {
     LOG_FATAL("Invalid op type");
     break;
@@ -1466,6 +1470,12 @@ getOpInputRefs(OpContext opContextHandle,
   }
   case ::tt::target::ttnn::OpType::ConcatenateHeadsOp: {
     tensorRefs = {opContext.type_as_ConcatenateHeadsOp()->in()};
+    break;
+  }
+  case ::tt::target::ttnn::OpType::GenericOp: {
+    for (const auto *input : *opContext.type_as_GenericOp()->inputs()) {
+      tensorRefs.push_back(input);
+    }
     break;
   }
   case ::tt::target::ttnn::OpType::NONE: {
