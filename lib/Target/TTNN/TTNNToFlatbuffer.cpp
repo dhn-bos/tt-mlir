@@ -1969,6 +1969,9 @@ createOp(FlatbufferObjectCache &cache, GenericOp op) {
   }
   auto out = cache.getOrCreate(op.getResult(), tensorValueToFlatbuffer,
                                kHostAllocatedSize);
+  auto generic_program = op.getProgram();
+  auto generic_kernel_cbs = generic_program.getCbs();
+  auto generic_kernels = generic_program.getKernels();
   auto program = cache.at<::tt::target::ttnn::GenericProgram>(op.getProgram());
   auto memoryConfig = getMemoryConfigIfNeeded(cache, op);
   return ::tt::target::ttnn::CreateGenericOpDirect(*cache.fbb, &inputs, program,
