@@ -10,7 +10,7 @@
 #include "ttmlir/Utils.h"
 
 #include <cstdint>
-#include <mlir/IR/Attributes.h>
+#include "mlir/IR/Attributes.h"
 #include <numeric>
 #include <optional>
 
@@ -1001,8 +1001,8 @@ DeviceComputeKernelConfigAttr::withDstFullSyncEn(bool value) const {
 
 ::llvm::LogicalResult ProgramAttr::verify(
     ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
-    llvm::ArrayRef<mlir::tt::ttnn::KernelCBAttr> cbs,
-    llvm::ArrayRef<mlir::Attribute> kernels) {
+    llvm::ArrayRef<mlir::Attribute> kernels,
+    llvm::ArrayRef<mlir::tt::ttnn::KernelCBAttr> cbs) {
   return ::llvm::success();
 }
 

@@ -702,8 +702,8 @@ def TTNN_KernelCBFormatAttr: TTNN_Attr<"KernelCBFormat", "kernel_cb_format"> {
   let description = [{
   }];
 
-  let parameters = (ins "uint32_t":$page_size,
-                        "uint32_t":$buffer_index,
+  let parameters = (ins "uint32_t":$buffer_index,
+                        "uint32_t":$page_size,
                         "ttcore::DataType":$dtype);
   let assemblyFormat = "`<` struct(params) `>`";
 
@@ -718,7 +718,7 @@ def TTNN_KernelCBAttr: TTNN_Attr<"KernelCB", "kernel_cb"> {
   let parameters = (ins "uint32_t":$total_size,
                         TTNN_CoreRangeAttr:$core_range,
                         ArrayRefParameter<"KernelCBFormatAttr">:$formats);
-  let assemblyFormat = "`<` struct(params) `>`";
+  let assemblyFormat = "`<` `total_size` `=` $total_size `,` `core_range` `=` $core_range `,` `formats` `=` `[` $formats `]` `>`";
 
   let genVerifyDecl = 1;
 }
@@ -763,9 +763,10 @@ def TTNN_ProgramAttr: TTNN_Attr<"Program", "program"> {
   let description = [{
   }];
 
-  let parameters = (ins ArrayRefParameter<"KernelCBAttr">:$cbs,
-                        ArrayRefParameter<"mlir::Attribute">:$kernels);
-  let assemblyFormat = "`<` struct(params) `>`";
+  let parameters = (ins ArrayRefParameter<"mlir::Attribute">:$kernels,
+                        ArrayRefParameter<"KernelCBAttr">:$cbs);
+
+  let assemblyFormat = "`<` `kernels` `=` `[` $kernels `]` `,` `cbs` `=` `[` $cbs `]` `>`";
 
   let genVerifyDecl = 1;
 }
