@@ -36,7 +36,7 @@ pytestmark = [pytest.mark.n300, pytest.mark.frontend("ttir")]
         (1, 1, 10, 10),
     ],
 )
-@pytest.mark.parametrize("mesh_shape", [(1, 2)])
+@pytest.mark.parametrize("mesh_shape", [(1, 2)], ids=shape_str)
 def test_all_gather(shape: Shape, mesh_shape: Tuple[int, int], request):
     def all_gather(in0: Operand, builder: TTIRBuilder):
         sharded = builder.mesh_shard(
@@ -89,7 +89,7 @@ def test_all_gather(shape: Shape, mesh_shape: Tuple[int, int], request):
         (1, 1, 32, 8),
     ],
 )
-@pytest.mark.parametrize("mesh_shape", [(1, 2)])
+@pytest.mark.parametrize("mesh_shape", [(1, 2)], ids=shape_str)
 def test_all_reduce(shape: Shape, mesh_shape: Tuple[int, int], request):
     def all_reduce(in0: Operand, builder: TTIRBuilder):
         sharded = builder.mesh_shard(
