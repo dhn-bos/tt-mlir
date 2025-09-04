@@ -199,7 +199,7 @@ def test_collective_permute(shape: Shape, mesh_shape: Tuple[int, int], request):
         )
         reduced = builder.collective_permute(
             sharded,
-            source_target_pairs=[(0, 1), (1, 0)],
+            source_target_pairs=[(0, 1)],
         )
         return builder.mesh_shard(
             reduced,
