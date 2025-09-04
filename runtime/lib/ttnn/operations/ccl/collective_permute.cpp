@@ -47,8 +47,13 @@ void run(const ::tt::target::ttnn::CollectivePermuteOp *op,
   // Iterate through sourceTargetPairs and for each pair, get the source tensor
   // from the map and convert to device storage with dest device.
   std::vector<bool> foundDestDevices(hostTensors.size(), false);
-  std::vector<::ttnn::Tensor> newHostTensors(hostTensors.size(),
-                                             ::ttnn::Tensor());
+
+  ::ttnn::Tensor emptyTensor =
+      ::ttnn::zeros(input.logical_shape(), input.dtype(), input.layout(),
+                    std::ref(*input.device()), input.memory_config());
+
+  std::vector<::ttnn::Tensor> newHostTensors =
+      ::ttnn::distributed::get_device_tensors(::ttnn::from_device(emptyTensor));
 
   for (size_t i = 0; i < sourceTargetPairs.size(); i += 2) {
     int64_t src = sourceTargetPairs[i];
@@ -63,26 +68,6 @@ void run(const ::tt::target::ttnn::CollectivePermuteOp *op,
 
     newHostTensors[dest] = srcHostTensor;
     foundDestDevices[dest] = true;
-  }
-
-  // Loop through all the devices that did not participate in the swaping and
-  // set their tensor device shard values to 0.
-  for (size_t i = 0; i < foundDestDevices.size(); i++) {
-    if (foundDestDevices[i]) {
-      continue;
-    }
-
-    auto &srcHostTensor = hostTensors[i];
-
-    // We need to memset this tensor value to 0 based on collective permute
-    // operation semantics
-    void *dstPtr = ::tt::runtime::ttnn::utils::getRawHostDataPtr(srcHostTensor);
-    size_t size =
-        srcHostTensor.physical_volume() * srcHostTensor.element_size();
-    std::memset(dstPtr, 0, size);
-
-    newHostTensors[i] = srcHostTensor;
-    foundDestDevices[i] = true;
   }
 
   // Combine all host tensor shards into a single host tensor with
