@@ -65,39 +65,44 @@ static FailureOr<mlir::OperationState> createNewOperationState(
             return mlir::success();
           })
           .Case<mlir::stablehlo::SliceOp>([&](auto sliceOp) {
+            // 1. Get the sharding for each operand dimension.
+            llvm::ArrayRef<mlir::sdy::DimensionShardingAttr>
+                operandDimShardings =
+                    shardy_utils::getOperandShardingAttr(
+                        sliceOp.getOperation()->getOpOperand(0), globalMeshOp)
+                        .getDimShardings();
+
+            // 2. Copy the current start_indices and limit_indices attributes.
             llvm::SmallVector<int64_t> startIndices(sliceOp.getStartIndices());
             llvm::SmallVector<int64_t> limitIndices(sliceOp.getLimitIndices());
 
-            // Iterate through start and limit indices and update them based on
-            // the sharding annotation for that dimension.
-            for (uint32_t i = 0; i < tensorShardings.size(); i++) {
+            // 3. Iterate through start and limit indices and update them based
+            // on the sharding annotation for that dimension.
+            for (uint32_t i = 0; i < operandDimShardings.size(); i++) {
               llvm::ArrayRef<mlir::sdy::DimensionShardingAttr> dimShardings =
-                  tensorShardings[i].getDimShardings();
+                  operandDimShardings[i];
 
-              for (const auto [index, dimShardingAttr] :
-                   llvm::enumerate(dimShardings)) {
-                FailureOr<int64_t> updatedStartDim =
-                    shardy_utils::calculateUpdatedDim(globalMeshOp.getMesh(),
-                                                      dimShardingAttr,
-                                                      startIndices[index]);
-                FailureOr<int64_t> updatedLimitDim =
-                    shardy_utils::calculateUpdatedDim(globalMeshOp.getMesh(),
-                                                      dimShardingAttr,
-                                                      limitIndices[index]);
-
-                if (failed(updatedStartDim) || failed(updatedLimitDim)) {
-                  sliceOp->emitError(
-                      "Could not apply propagated tensor shardings "
-                      "to attribute dictionary for slice op");
-                  return mlir::failure();
-                }
-
-                startIndices[index] = *updatedStartDim;
-                limitIndices[index] = *updatedLimitDim;
+              if (dimShardings.size() > 1) {
+                sliceOp->emitError(
+                    "Slice operation has multiple shardings on a single tensor "
+                    "dimension. This is not supported.");
+                return mlir::failure();
               }
+
+              FailureOr<int64_t> updatedLimitDim =
+                  shardy_utils::calculateUpdatedDim(
+                      globalMeshOp.getMesh(), dimShardings[0], limitIndices[i]);
+
+              if (failed(updatedLimitDim)) {
+                sliceOp->emitError(
+                    "Could not apply propagated tensor shardings "
+                    "to attribute dictionary for slice op");
+                return mlir::failure();
+              }
+              limitIndices[i] = *updatedLimitDim;
             }
 
-            // Update start and limit indices in op named attributes.
+            // 4. Update start and limit indices in op named attributes.
             llvm::StringRef startIndicesAttrName = "start_indices";
             llvm::StringRef limitIndicesAttrName = "limit_indices";
 
