@@ -2504,7 +2504,8 @@ def get_golden_function(ttir_op_class: type, **kwargs) -> Optional[Callable]:
         else:
             return untilize_golden
 
-    return GOLDEN_MAPPINGS[ttir_op_class]
+    if ttir_op_class in GOLDEN_MAPPINGS:
+        return GOLDEN_MAPPINGS[ttir_op_class]
 
 
 """
@@ -2543,7 +2544,7 @@ GOLDEN_MAPPINGS: Dict[type, Callable] = {
     ttir.GeluOp: torch.nn.functional.gelu,
     ttir.IsFiniteOp: torch.isfinite,
     ttir.NegOp: torch.neg,
-    ttir.TanOp: torch.tan,
+    # ttir.TanOp: torch.tan,
     ttir.AtanOp: torch.atan,
     ttir.TanhOp: torch.tanh,
     ttir.ReciprocalOp: torch.reciprocal,
