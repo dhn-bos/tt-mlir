@@ -91,6 +91,7 @@ union OpType {
   SliceOp,
   SoftmaxOp,
   SortOp,
+  SplitQueryKeyValueAndSplitHeadsOp,
   ToDeviceOp,
   ToDTypeOp,
   ToLayoutOp,

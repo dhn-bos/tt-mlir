@@ -2204,6 +2204,19 @@ OpModel<ConcatenateHeadsOp>::getOpRuntime(llvm::ArrayRef<int64_t> inputShape,
 #endif // TTMLIR_ENABLE_OPMODEL
 }
 
+// //===----------------------------------------------------------------------===//
+// // SplitQueryKeyValueAndSplitHeadsOp
+// //===----------------------------------------------------------------------===//
+// llvm::Expected<OpConstraints>
+// OpModel<SplitQueryKeyValueAndSplitHeadsOp>::getOpConstraints(/* args */){
+//   // ...
+// }
+// // and:
+// llvm::Expected<size_t>
+// OpModel<SplitQueryKeyValueAndSplitHeadsOp>::getOpRuntime(/* args */){
+//   // ...
+// }
+
 //===----------------------------------------------------------------------===//
 // ScaledDotProductAttentionDecodeOp
 //===----------------------------------------------------------------------===//
