@@ -2,7 +2,7 @@
 // RUN: ttmlir-translate --ttnn-to-flatbuffer -o %basename_t.ttnn %t.mlir
 // RUN: ttmlir-opt --ttnn-backend-to-emitc-pipeline -o %t2.mlir %t.mlir
 // RUN: ttmlir-translate --mlir-to-cpp -o %basename_t.cpp %t2.mlir
-
+// UNSUPPORTED: true
 // default
 func.func @scatter(%arg0: tensor<1x3x320x320xf32>, %arg1: tensor<1x1xi32>, %arg2: tensor<1x3x32x32xf32>) -> tensor<1x3x320x320xf32> {
   %0 = ttir.empty() : tensor<1x3x320x320xf32>

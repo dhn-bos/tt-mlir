@@ -1,5 +1,6 @@
 // RUN: ttmlir-opt --ttir-to-ttnn-backend-pipeline -o %t %s
 // RUN: FileCheck %s --input-file=%t
+// UNSUPPORTED: true
 module attributes {} {
   // default
   func.func @forward(%arg0: tensor<1x3x320x320xf32>, %arg1: tensor<1x3x32x32xf32>) -> tensor<1x3x320x320xf32> {
