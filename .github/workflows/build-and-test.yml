@@ -366,8 +366,10 @@ jobs:
           export PYTHONPATH="${GITHUB_WORKSPACE}/tools/tt-alchemist/templates/python/local:${PYTHONPATH}"
           find ttir-builder-artifacts -name "*.py" -type f | while read -r py_file; do
             python "$py_file"
+          done
           find stablehlo-builder-artifacts -name "*.py" -type f | while read -r py_file; do
             python "$py_file"
+          done
         fi
 
 
