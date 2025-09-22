@@ -34,6 +34,22 @@ add_custom_command(
 add_custom_target(ttrt ALL
   COMMENT "python ttrt package"
   DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/build/.installed)
+add_dependencies(ttrt tt-metal-download)
+
+# Install ttrt runtime dependencies (ttnn pip packages)
+find_program(GREP_EXEC grep REQUIRED)
+set(GREP_PATTERN [[^(git\+|^-r|^#)]])
+set(METAL_REQUIREMENTS_PATH ${PROJECT_SOURCE_DIR}/third_party/tt-metal/src/tt-metal/tt_metal/python_env/requirements-dev.txt)
+
+# Set extra build dependencies here that depend on the pip install of ttnn
+set(ttrt_EXTRA_PIP_PACKAGES graphviz)
+
+add_custom_command(TARGET ttrt POST_BUILD
+    COMMENT "Setting up ttrt dependencies"
+    COMMAND ${GREP_EXEC} -vE '${GREP_PATTERN}' ${METAL_REQUIREMENTS_PATH} > ${CMAKE_CURRENT_BINARY_DIR}/ttrt_requirements.txt
+    COMMAND PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu pip install -r ${CMAKE_CURRENT_BINARY_DIR}/ttrt_requirements.txt
+    COMMAND PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu pip install ${ttrt_EXTRA_PIP_PACKAGES}
+)
 
 declare_mlir_python_sources(TTRTSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
