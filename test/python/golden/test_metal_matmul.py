@@ -21,13 +21,7 @@ pytestmark = pytest.mark.frontend("ttir")
 @pytest.mark.parametrize("n", [4])
 @pytest.mark.parametrize("target", ["ttmetal"])
 # Single core matmuls, 8 output tiles per core max
-def test_matmul_single_core_8otpc(
-    m: int,
-    k: int,
-    n: int,
-    target: str,
-    request,
-):
+def test_matmul_single_core_8otpc(m: int, k: int, n: int, target: str, request, device):
     tile_size = 32
     lhs = (
         m * tile_size,
@@ -55,6 +49,7 @@ def test_matmul_single_core_8otpc(
         matmul,
         [lhs, rhs],
         target=target,
+        device=device,
         custom_pipeline=f"ttir-to-ttmetal-pipeline{{{' '.join(options)}}}",
         test_base=request.node.name,
         print_ir=True,
@@ -69,13 +64,7 @@ def test_matmul_single_core_8otpc(
 @pytest.mark.parametrize("n", [3, 6])
 @pytest.mark.parametrize("target", ["ttmetal"])
 # Multi core matmuls, 8 output tiles per core max
-def test_matmul_multi_core_8otpc(
-    m: int,
-    k: int,
-    n: int,
-    target: str,
-    request,
-):
+def test_matmul_multi_core_8otpc(m: int, k: int, n: int, target: str, request, device):
     tile_size = 32
     lhs = (
         m * tile_size,
@@ -102,6 +91,7 @@ def test_matmul_multi_core_8otpc(
         matmul,
         [lhs, rhs],
         target=target,
+        device=device,
         custom_pipeline=f"ttir-to-ttmetal-pipeline{{{' '.join(options)}}}",
         test_base=request.node.name,
         print_ir=True,
@@ -131,6 +121,7 @@ def test_matmul_ttnn_shapes_single_buffered(
     use_tile_matmul: bool,
     target: str,
     request,
+    device,
 ):
     lhs = (
         shape[0],
@@ -158,6 +149,7 @@ def test_matmul_ttnn_shapes_single_buffered(
         matmul,
         [lhs, rhs],
         target=target,
+        device=device,
         custom_pipeline=f"ttir-to-ttmetal-pipeline{{{' '.join(options)}}}",
         test_base=request.node.name,
         module_dump=True,
@@ -186,6 +178,7 @@ def test_matmul_ttnn_shapes_double_buffered(
     use_tile_matmul: bool,
     target: str,
     request,
+    device,
 ):
     lhs = (
         shape[0],
@@ -212,6 +205,7 @@ def test_matmul_ttnn_shapes_double_buffered(
         matmul,
         [lhs, rhs],
         target=target,
+        device=device,
         custom_pipeline=f"ttir-to-ttmetal-pipeline{{{' '.join(options)}}}",
         test_base=request.node.name,
         module_dump=True,
