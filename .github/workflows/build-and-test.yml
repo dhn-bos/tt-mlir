@@ -363,6 +363,11 @@ jobs:
           ttrt run ${{ matrix.build.ttrt-flags }} stablehlo-builder-artifacts/
         fi
         if [[ "${{ matrix.build.run-emitpy }}" == "true" ]]; then
+          wget -O ttnn-0.59.0rc57-cp310-cp310-manylinux_2_34_x86_64.whl \
+            https://github.com/tenstorrent/tt-metal/releases/download/v0.59.0/ttnn-0.59.0rc57-cp310-cp310-manylinux_2_34_x86_64.whl
+          pip show ttnn && pip uninstall -y ttnn || true
+          pip install ttnn-0.59.0rc57-cp310-cp310-manylinux_2_34_x86_64.whl --force-reinstall
+          rm -f ttnn-0.59.0rc57-cp310-cp310-manylinux_2_34_x86_64.whl
           export PYTHONPATH="${GITHUB_WORKSPACE}/tools/tt-alchemist/templates/python/local:${PYTHONPATH}"
           find ttir-builder-artifacts -name "*.py" -type f | while read -r py_file; do
             python "$py_file"
