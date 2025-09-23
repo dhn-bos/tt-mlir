@@ -450,7 +450,7 @@ def TTIRAllocate: Pass<"ttir-allocate", "::mlir::ModuleOp"> {
            "Number of backing buffers to allocate per stream storage (>=1) Default is 2.">,
     Option<"alwaysStream",
             "always-stream",
-            "bool", /*default=*/"true",
+            "bool", /*default=*/"false",
             "When true, always insert streaming buffers.">,
   ];
 }
