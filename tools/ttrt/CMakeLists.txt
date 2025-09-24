@@ -50,6 +50,7 @@ declare_mlir_python_sources(TTRTSources
     common/api.py
     common/callback.py
     common/check.py
+    common/emitc.py
     common/perf.py
     common/query.py
     common/read.py

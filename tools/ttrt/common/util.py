@@ -594,6 +594,9 @@ class Artifacts:
     def get_binary_perf_folder_path(self, binary):
         return f"{self.get_artifacts_folder_path()}/{binary.name}/perf"
 
+    def get_binary_run_folder_path(self, binary):
+        return f"{self.get_artifacts_folder_path()}/{binary.name}/run"
+
     def create_artifacts(self):
         self.file_manager.create_directory(self.get_artifacts_folder_path())
 
