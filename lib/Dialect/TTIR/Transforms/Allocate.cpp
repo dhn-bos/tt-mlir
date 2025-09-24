@@ -144,6 +144,8 @@ struct MemrefValueContext {
 
   int32_t varIndex = -1; // Needed to retrieve `Planner::Variable::placement`.
   int32_t reqIndex = -1; // Needed to retrieve `Planner::Request::offset`.
+
+  bool isCastOp = false;
 };
 
 using DefUseChain = llvm::SmallVector<Operation *, 4>;
@@ -394,6 +396,12 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
 
       operandCtx.isOutput = (operandIndex >= outputsStart);
 
+      if (mlir::isa<ttir::TTNNMetalLayoutCastOp>(
+              genericOp.getOperand(operandIndex).getDefiningOp())) {
+        operandCtx.requiresStream = true;
+        continue;
+      }
+
       // A core participating in a reduction dim necessarily requires
       // non-local data movement unless it is the only core involved
       // in that dim.
@@ -474,10 +482,18 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
 
         memrefCtx.genericUsers.insert(genericOp);
         memrefCtx.usedForOutput |= streamCtx.isOutput;
+        memrefCtx.isCastOp =
+            memref.getDefiningOp()
+                ? mlir::isa<ttir::TTNNMetalLayoutCastOp>(memref.getDefiningOp())
+                : false;
+        // if (memrefCtx.isCastOp) {
+        //   genericCtx.operands.try_emplace(memref, std::move(streamCtx));
+        //   continue;
+        // }
 
         if (inserted) {
           // These were not discovered by the earlier `analyzeAllocOps()`, it
-          // could only happen if the value is a block arg.
+          // could only happen if the value is a block arg or a cast op
           TT_debugv(mlir::isa<BlockArgument>(memref),
                     "expected a block arg: {}", memref);
           memrefCtx.type = mlir::cast<MemRefType>(memref.getType());
@@ -551,6 +567,15 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
       const MemorySpace memspace =
           getMemorySpace(memrefCtx.type, MemorySpace::System);
       if (!ttcore::isDeviceMemorySpace(memspace)) {
+        continue;
+      }
+      if (memrefCtx.isCastOp) {
+        OperandContext &operandCtx =
+            analysis.generics[*memrefCtx.genericUsers.begin()]
+                .operands.find(memref)
+                ->second;
+        operandCtx.bufferType = selectStreamBuffer(rewriter, memrefCtx.type, 1);
+        memrefCtx.remappedMemSpace = MemorySpace::DeviceL1;
         continue;
       }
       // Invariant established earlier: all `analysis.memrefs` in DRAM/L1
@@ -687,7 +712,8 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
       // request sizes using DRAM alignment.
 
       for (auto &[memref, memrefCtx] : analysis.memrefs) {
-        if (!isDeviceMemorySpace(memrefCtx.type, MemorySpace::System)) {
+        if (!isDeviceMemorySpace(memrefCtx.type, MemorySpace::System) ||
+            memrefCtx.isCastOp) {
           continue;
         }
 
@@ -746,7 +772,8 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
     IRRewriter rewriter(funcOp->getContext());
 
     for (auto &[memref, memrefCtx] : analysis.memrefs) {
-      if (!isDeviceMemorySpace(memrefCtx.type, MemorySpace::System)) {
+      if (!isDeviceMemorySpace(memrefCtx.type, MemorySpace::System) ||
+          memrefCtx.isCastOp) {
         continue;
       }
       memref::AllocOp allocOp = memref.getDefiningOp<memref::AllocOp>();
@@ -793,6 +820,18 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
       for (const auto &[memref, operandCtx] : genericCtx.operands) {
         TT_debug(analysis.memrefs.contains(memref));
         const MemrefValueContext &memrefCtx = analysis.memrefs.at(memref);
+        if (memrefCtx.isCastOp) {
+          auto &operand = genericOp->getOpOperand(operandIndex);
+          if (memrefCtx.usedForOutput) {
+            ++operandIndex;
+            continue;
+          }
+          if (failed(insertStream(rewriter, operand, genericOp, operandCtx))) {
+            return failure();
+          }
+          ++operandIndex;
+          continue;
+        }
 
         const MemorySpace remappedMemorySpace = *memrefCtx.remappedMemSpace;
 
@@ -857,6 +896,35 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
     rewriter.finalizeOpModification(op);
   }
 
+  static LogicalResult insertStream(RewriterBase &rewriter, OpOperand &operand,
+                                    ttir::GenericOp op,
+                                    const OperandContext &operandCtx) {
+    auto operandMemrefType = mlir::cast<MemRefType>(operand.get().getType());
+
+    OpBuilder::InsertionGuard guard(rewriter);
+    {
+      // By design, must insert just before the generic op.
+      rewriter.setInsertionPoint(op);
+
+      auto streamAttr = rewriter.getAttr<ttcore::ViewLayoutAttr>(
+          rewriter.getMultiDimIdentityMap(operandMemrefType.getRank()));
+      auto streamMemref = MemRefType::get(
+          operandMemrefType.getShape(), operandMemrefType.getElementType(),
+          streamAttr, operandMemrefType.getMemorySpace());
+
+      TT_debug(operandCtx.bufferType != nullptr);
+      auto bufferMemref = operandCtx.bufferType;
+      auto buffer = rewriter.create<memref::AllocOp>(op.getLoc(), bufferMemref);
+
+      auto stream = rewriter.create<ttir::StreamLayoutOp>(
+          op.getLoc(), streamMemref, operand.get(), buffer);
+
+      rewriter.modifyOpInPlace(op,
+                               [&]() { operand.assign(stream.getResult()); });
+    }
+    return success();
+  }
+
   static LogicalResult
   insertStream(RewriterBase &rewriter, OpOperand &operand, ttir::GenericOp op,
                const Planner::Request &req, const OperandContext &operandCtx,
@@ -915,7 +983,8 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
         })
         .Case([&](ttir::StreamLayoutOp op) {
           return getOperandDefChain(genericOp, op.getInput(), chain);
-        });
+        })
+        .Case([&](ttir::TTNNMetalLayoutCastOp op) { return operand; });
   }
 
   // TODO(vroubtsov) this is currently mocked up to use single tile buffers
