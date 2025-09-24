@@ -18,6 +18,8 @@ import traceback
 from pathlib import Path
 import csv
 import ast
+from functools import reduce
+import operator
 
 from ttrt.common.util import *
 from ttrt.common.query import Query
@@ -117,7 +119,7 @@ class EmitC:
             type=bool,
             default=False,
             choices=[True, False],
-            help="toggles emitc testing",
+            help="toggles EmitC testing",
         )
         EmitC.register_arg(
             name="--trace-region-size",
@@ -172,7 +174,6 @@ class EmitC:
 
         self.logger = logger if logger != None else Logger(self["--log-file"])
         self.logging = self.logger.get_logger()
-        self.globals = Globals(self.logger)
         self.file_manager = FileManager(self.logger)
         self.artifacts = (
             artifacts
@@ -184,7 +185,7 @@ class EmitC:
             )
         )
         self.emitc_dylibs = []
-        self.ttnn_binaries = []
+        self.ttnn_binaries = {}
         self.results = Results(self.logger, self.file_manager)
 
     def preprocess(self):
@@ -200,236 +201,207 @@ class EmitC:
     def check_constraints(self):
         self.logging.debug(f"------checking constraints for emitc API")
 
-        # is this potentially an unneccessary duplicate of run.py?
-        if not hasattr(self, "dylib"):
-            # load from Capsule instead. only TTNN Path is supported for now
-            bin = Binary(self.logger, self.file_manager, "", self["--capsule"])
-            if not bin.check_version(ignore=self["--ignore-version"]):
-                self.logger.warning(
-                    "Flatbuffer version not present, are you sure that the binary is valid? - Skipped"
-                )
-                return
+        emitc_dylib_paths = self.file_manager.find_emitc_dylib_paths(self["dylib"])
 
-            if self["--program-index"] != "all":
-                if not bin.check_program_index_exists(int(self["--program-index"])):
-                    self.logging.warning(
-                        f"program index={int(self['--program-index'])} is greater than number of programs in: {bin.file_path} - skipping this test"
-                    )
-                    return
-            self.ttnn_binaries.append(bin)
-        else:
-            emitc_dylib_paths = self.file_manager.find_emitc_dylib_paths(self["dylib"])
-            ttnn_binary_paths = self.file_manager.find_ttnn_binary_paths(self["dylib"])
+        self.logging.debug(f"emitc_dylib_paths={emitc_dylib_paths}")
 
-            self.logging.debug(f"emitc_dylib_paths={emitc_dylib_paths}")
-            self.logging.debug(f"ttnn_binary_paths={ttnn_binary_paths}")
+        for path in emitc_dylib_paths:
+            dylib = EmitCDylib(self.logger, self.file_manager, path)
+            self.emitc_dylibs.append(dylib)
+            corresponding_ttnn_path = self.file_manager.find_so_corresponding_ttnn(path)
 
-            for path in emitc_dylib_paths:
-                dylib = EmitCDylib(self.logger, self.file_manager, path)
-                self.emitc_dylibs.append(dylib)
-                corresponding_ttnn = self.file_manager.find_so_corresponding_ttnn(path)
+            if corresponding_ttnn_path:
+                bin = Binary(self.logger, self.file_manager, corresponding_ttnn_path)
+                self.ttnn_binaries[dylib] = bin
 
-                if corresponding_ttnn:
-                    ttnn_binary_paths.append(corresponding_ttnn)
-
-            for path in ttnn_binary_paths:
-                bin = Binary(self.logger, self.file_manager, path)
-                try:
-                    bin.check_version(ignore=self["--ignore-version"])
-                except Exception as e:
-                    test_result = {
-                        "file_path": path,
-                        "result": "skip",
-                        "exception": str(e),
-                        "log_file": self.logger.file_name,
-                        "artifacts": self.artifacts.artifacts_folder_path,
-                        "program_index": self["--program-index"],
-                    }
-                    self.logging.warning(
-                        f"SKIP: test={path} was skipped with exception={str(e)}"
-                    )
-                    self.results.add_result(test_result)
-                    continue
-
-                if self["--program-index"] != "all":
-                    if not bin.check_program_index_exists(int(self["--program-index"])):
-                        message = f"program index={int(self['--program-index'])} is greater than number of programs in: {bin.file_path} - skipping this test"
-                        self.logging.warning(message)
-                        test_result = {
-                            "file_path": path,
-                            "result": "skip",
-                            "exception": message,
-                            "log_file": self.logger.file_name,
-                            "artifacts": self.artifacts.artifacts_folder_path,
-                            "program_index": self["--program-index"],
-                        }
-                        self.logging.warning(
-                            f"SKIP: test={path} was skipped with exception={message}"
-                        )
-                        self.results.add_result(test_result)
-                        continue
-
-                self.ttnn_binaries.append(bin)
-
-            self.logging.debug(f"finished checking constraints for emitc API")
+        # Do I want to print ttnn binary paths found?
 
         self.logging.debug(f"------finished checking constraints for emitc API")
 
     def execute(self):
+        import ttrt.runtime
+
         self.logging.debug(f"------executing emitc API")
 
-        def _execute(emitc_dylibs):
-            if len(emitc_dylibs) == 0:
-                self.logging.warning(f"no EmitC dylibs found to run - returning early")
-                return
-
-            # change this: to for .dylib files in directory, for each, if there is a matching .ttnn file, run
-            for dylib in self.emitc_dylibs:
-                try:
-                    import ttrt.runtime
-
-                    # .dylib are compiled such that they have the same name as flatbuffers, dylib we rename here
-                    emitc_dylib_path = (
-                        dylib.file_path
-                    )  # ***** #bin.file_path.replace(".ttnn", ".dylib")
-
-                    compare_to_ttnn = False
-                    if dylib in self.ttnn_binaries:
-                        bin = self.ttnn_binaries[dylib]
-                        compare_to_ttnn = True
-
-                    # Open the dylib
-                    emitc_dylib_handle = ttrt.runtime.test.open_so(emitc_dylib_path)
-                    self.logging.debug(f"opened emitc dylib={emitc_dylib_path}")
-
-                    # Run to EmitC
-                    # *************
-                    for program_index in ttrt.runtime.test.get_so_programs(
-                        emitc_dylib_handle
-                    ):
-                        # Create symbol string to read from dylib
-                        fwd_func_name = program.name
-
-                        # pre-upload inputs
-                        inputs = convert_input_layouts(
-                            device, inputs, bin.fbb, program_index
-                        )
-
-                        for loop in range(self["--loops"]):
-                            emitc_outs = ttrt.runtime.test.run_so_program(
-                                emitc_dylib_handle,
-                                fwd_func_name,
-                                inputs,
-                                device,
-                            )
-
-                    ttrt.runtime.test.close_so(emitc_dylib_handle)
-                except Exception as e:
-                    self.logging.error(f"Error during EmitC execution: {str(e)}")
-                    raise e
-                try:
-                    if compare_to_ttnn:
-                        command_options = f"--program-index {self['--program-index']} --loops {self['--loops']} --save-artifacts "
-
-                        if self["--memory"]:
-                            command_options += " --memory "
-
-                        if self["--disable-eth-dispatch"]:
-                            command_options += " --disable-eth-dispatch "
-
-                        if self["--disable-golden"]:
-                            command_options += " --disable-golden "
-
-                        if self["--enable-program-cache"]:
-                            command_options += " --enable-program-cache "
-
-                        if self["--dump-device-rate"] != 1000:
-                            command_options += (
-                                f" --dump-device-rate {self['--dump-device-rate']} "
-                            )
-
-                        if self["--benchmark"]:
-                            command_options += " --benchmark "
-
-                        if self["--ignore-version"]:
-                            command_options += " --ignore-version "
-
-                        if self["--disable-ttrt-callbacks"]:
-                            command_options += " --disable-ttrt-callbacks "
-
-                        ttrt_executable_path = shutil.which("ttrt")
-                        test_command = f"{ttrt_executable_path} run {bin.file_path} {command_options}"
-                        self.logging.info(
-                            f"test command for binary={bin.file_path} is: {test_command}"
-                        )
-                        testProcess = subprocess.Popen(
-                            [test_command],
-                            shell=True,
-                            env=env_vars,
-                            preexec_fn=os.setsid,
-                        )
-
-                        fbb_output_tensors = self.load_output_tensors_from_artifacts(
-                            bin
-                        )
-
-                        # post-process test results
-                        test_result = []
-                        with open("run_results.json", "r") as file:
-                            test_result = json.load(file)
-
-                        for result in test_result:
-                            if result["result"] != "pass":
-                                if result["result"] == "test_error":
-                                    raise TTRTTestException(str(result["exception"]))
-                                raise Exception(f'{result["exception"]}')
-
-                        if compare_to_ttnn:
-                            emitc_outs = [
-                                ttrt.runtime.to_host(emitc_out, untilize=True)[0]
-                                for emitc_out in emitc_outs
-                            ]
-                            self.logging.debug(
-                                f"got emitc outputs for program_index={program_index}, loop={loop}"
-                            )
-
-                            all_tensors_match = ttrt.runtime.test.compare_outs(
-                                outputs, emitc_outs
-                            )
-
-                            if not all_tensors_match:
-                                self.logging.error(
-                                    "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
-                                )
-                                self.logging.error(outputs, emitc_outs)
-                                raise Exception(
-                                    "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
-                                )
-                            self.logging.info(
-                                f"EmitC tensors match for {bin.file_path}"
-                            )
-                except Exception as e:
-                    result = "error"
-                    if isinstance(e, TTRTTestException):
-                        result = "test_error"
-                    test_result = {
-                        "file_path": dylib.file_path,
-                        "result": result,
-                        "exception": str(e),
-                        "log_file": self.logger.file_name,
-                        "artifacts": self.artifacts.artifacts_folder_path,
-                        "program_index": self["--program-index"],
-                    }
-                    self.logging.error(
-                        f"ERROR: test={dylib.file_path} experienced an error with exception={str(e)}"
-                    )
-                    self.results.add_result(test_result)
-                    dylib.test_result = result
-                    traceback.print_exc()
-                    continue
-
         self.logging.debug(f"executing emitc_dylibs")
-        _execute(self.emitc_dylibs)
+
+        if len(self.emitc_dylibs) == 0:
+            self.logging.warning(f"no EmitC dylibs found to run - returning early")
+            return
+
+        dispatch_core_type = ttrt.runtime.DispatchCoreType.ETH
+
+        if self["--disable-eth-dispatch"]:
+            dispatch_core_type = ttrt.runtime.DispatchCoreType.WORKER
+
+        if "--init" in sys.argv:
+            self["--disable-golden"] = True
+
+        # ***********
+        num_devices = 2  # len(self.query.device_ids)
+        mesh_options = ttrt.runtime.MeshDeviceOptions()
+        mesh_options.dispatch_core_type = dispatch_core_type
+        mesh_options.enable_program_cache = self["--enable-program-cache"]
+        mesh_options.trace_region_size = self["--trace-region-size"]
+
+        # Initialize `device` to `None` for error handling in case device opening fails
+        device = None
+
+        # change this: to for .dylib files in directory, for each, if there is a matching .ttnn file, run
+        for dylib in self.emitc_dylibs:
+            try:
+                compare_to_ttnn = False
+                if dylib in self.ttnn_binaries:
+                    bin = self.ttnn_binaries[dylib]
+                    compare_to_ttnn = True
+
+                # ***** Will need another solution if no ttnn
+                fb_mesh_shape = bin.get_program(0).mesh_shape
+                num_mesh_devices = reduce(operator.mul, fb_mesh_shape, 1)
+                mesh_options.mesh_shape = fb_mesh_shape
+
+                # Verify that the expected number of devices in the fb mesh shape is valid on this system
+                if num_mesh_devices > num_devices:
+                    raise Exception(
+                        f"Not enough devices ({num_devices}) to run program with mesh shape {fb_mesh_shape}"
+                    )
+
+                if num_mesh_devices > 1 and self["--fabric-config"] is not None:
+                    ttrt.runtime.set_fabric_config(
+                        parse_fabric_config(self["--fabric-config"])
+                    )
+
+                # Open a device of shape (x,y), where (x,y) is the mesh shape supplied by the flatbuffer
+                device = ttrt.runtime.open_mesh_device(mesh_options)
+
+                # Open the dylib
+                emitc_dylib_handle = ttrt.runtime.test.open_so(dylib.file_path)
+                self.logging.debug(f"opened emitc dylib={dylib.file_path}")
+
+                # Run to EmitC
+                # ************* MAKE SURE NAMES IN ORDER
+                program_names = ttrt.runtime.test.get_so_programs(emitc_dylib_handle)
+                print("PROGRAM_NAMES", program_names)
+                for program_index in range(len(program_names)):
+                    # pre-upload inputs
+                    # ****** this will be a problem if no ttnn to compare to
+                    inputs = convert_input_layouts(
+                        device, inputs, bin.fbb, program_index
+                    )
+
+                    for loop in range(self["--loops"]):
+                        emitc_outs = ttrt.runtime.test.run_so_program(
+                            emitc_dylib_handle,
+                            program_names[program_index],
+                            inputs,
+                            device,
+                        )
+
+                ttrt.runtime.test.close_so(emitc_dylib_handle)
+
+                if compare_to_ttnn:
+                    command_options = f"--program-index {self['--program-index']} --loops {self['--loops']} --save-artifacts "
+
+                    if self["--memory"]:
+                        command_options += " --memory "
+
+                    if self["--disable-eth-dispatch"]:
+                        command_options += " --disable-eth-dispatch "
+
+                    if self["--disable-golden"]:
+                        command_options += " --disable-golden "
+
+                    if self["--enable-program-cache"]:
+                        command_options += " --enable-program-cache "
+
+                    if self["--dump-device-rate"] != 1000:
+                        command_options += (
+                            f" --dump-device-rate {self['--dump-device-rate']} "
+                        )
+
+                    if self["--benchmark"]:
+                        command_options += " --benchmark "
+
+                    if self["--ignore-version"]:
+                        command_options += " --ignore-version "
+
+                    if self["--disable-ttrt-callbacks"]:
+                        command_options += " --disable-ttrt-callbacks "
+
+                    ttrt_executable_path = shutil.which("ttrt")
+                    test_command = (
+                        f"{ttrt_executable_path} run {bin.file_path} {command_options}"
+                    )
+                    self.logging.info(
+                        f"test command for binary={bin.file_path} is: {test_command}"
+                    )
+                    testProcess = subprocess.Popen(
+                        [test_command],
+                        shell=True,
+                        preexec_fn=os.setsid,
+                    )
+
+                    fbb_output_tensors = self.load_output_tensors_from_artifacts(bin)
+
+                    # post-process test results
+                    # I mean this just can't be necessary right?
+                    """
+                    test_result = []
+                    with open("run_results.json", "r") as file:
+                        test_result = json.load(file)
+
+                    for result in test_result:
+                        if result["result"] != "pass":
+                            if result["result"] == "test_error":
+                                raise TTRTTestException(str(result["exception"]))
+                            raise Exception(f'{result["exception"]}')
+                    """
+                    emitc_outs = [
+                        ttrt.runtime.to_host(emitc_out, untilize=True)[0]
+                        for emitc_out in emitc_outs
+                    ]
+                    self.logging.debug(
+                        f"got emitc outputs for program_index={program_index}, loop={loop}"
+                    )
+
+                    all_tensors_match = ttrt.runtime.test.compare_outs(
+                        outputs, emitc_outs
+                    )
+
+                    if not all_tensors_match:
+                        self.logging.error(
+                            "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+                        )
+                        self.logging.error(outputs, emitc_outs)
+                        raise Exception(
+                            "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+                        )
+                    self.logging.info(f"EmitC tensors match for {bin.file_path}")
+            except Exception as e:
+                result = "error"
+                if isinstance(e, TTRTTestException):
+                    result = "test_error"
+                test_result = {
+                    "file_path": dylib.file_path,
+                    "result": result,
+                    "exception": str(e),
+                    "log_file": self.logger.file_name,
+                    "artifacts": self.artifacts.artifacts_folder_path,
+                    "program_index": self["--program-index"],
+                }
+                self.logging.error(
+                    f"ERROR: test={dylib.file_path} experienced an error with exception={str(e)}"
+                )
+                self.results.add_result(test_result)
+                dylib.test_result = result
+                traceback.print_exc()
+                continue
+            finally:
+                # Only close the device it if was opened
+                if device is not None:
+                    ttrt.runtime.close_mesh_device(device)
+                    device = None
+
         self.logging.debug(f"finished executing emitc_dylibs")
 
         self.logging.debug(f"------finished executing emitc API")
