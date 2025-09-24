@@ -820,16 +820,16 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
       for (const auto &[memref, operandCtx] : genericCtx.operands) {
         TT_debug(analysis.memrefs.contains(memref));
         const MemrefValueContext &memrefCtx = analysis.memrefs.at(memref);
+        auto &operand = genericOp->getOpOperand(operandIndex);
+        ++operandIndex;
+
         if (memrefCtx.isCastOp) {
-          auto &operand = genericOp->getOpOperand(operandIndex);
-          if (memrefCtx.usedForOutput) {
-            ++operandIndex;
-            continue;
+          if (!memrefCtx.usedForOutput) {
+            if (failed(
+                    insertStream(rewriter, operand, genericOp, operandCtx))) {
+              return failure();
+            }
           }
-          if (failed(insertStream(rewriter, operand, genericOp, operandCtx))) {
-            return failure();
-          }
-          ++operandIndex;
           continue;
         }
 
@@ -867,14 +867,11 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
 
           // Note that this will take care of inserting the dealloc for the
           // stream buffer.
-          auto &operand = genericOp->getOpOperand(operandIndex);
           if (failed(insertStream(rewriter, operand, genericOp, req, operandCtx,
                                   L1memInfo, analysis.sequencing))) {
             return failure();
           }
         }
-
-        ++operandIndex;
       }
     }
 
@@ -896,66 +893,53 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
     rewriter.finalizeOpModification(op);
   }
 
+  static LogicalResult insertStreamImpl(RewriterBase &rewriter,
+                                        OpOperand &operand, ttir::GenericOp op,
+                                        const OperandContext &operandCtx,
+                                        memref::AllocOp buffer) {
+    auto operandMemrefType = mlir::cast<MemRefType>(operand.get().getType());
+
+    auto streamAttr = rewriter.getAttr<ttcore::ViewLayoutAttr>(
+        rewriter.getMultiDimIdentityMap(operandMemrefType.getRank()));
+    auto streamMemref = MemRefType::get(
+        operandMemrefType.getShape(), operandMemrefType.getElementType(),
+        streamAttr, operandMemrefType.getMemorySpace());
+
+    auto stream = rewriter.create<ttir::StreamLayoutOp>(
+        op.getLoc(), streamMemref, operand.get(), buffer);
+
+    rewriter.modifyOpInPlace(op, [&]() { operand.assign(stream.getResult()); });
+    return success();
+  }
+
   static LogicalResult insertStream(RewriterBase &rewriter, OpOperand &operand,
                                     ttir::GenericOp op,
                                     const OperandContext &operandCtx) {
-    auto operandMemrefType = mlir::cast<MemRefType>(operand.get().getType());
-
     OpBuilder::InsertionGuard guard(rewriter);
-    {
-      // By design, must insert just before the generic op.
-      rewriter.setInsertionPoint(op);
+    rewriter.setInsertionPoint(op);
 
-      auto streamAttr = rewriter.getAttr<ttcore::ViewLayoutAttr>(
-          rewriter.getMultiDimIdentityMap(operandMemrefType.getRank()));
-      auto streamMemref = MemRefType::get(
-          operandMemrefType.getShape(), operandMemrefType.getElementType(),
-          streamAttr, operandMemrefType.getMemorySpace());
+    auto bufferMemref = operandCtx.bufferType;
+    TT_debug(bufferMemref != nullptr);
+    auto buffer = rewriter.create<memref::AllocOp>(op.getLoc(), bufferMemref);
 
-      TT_debug(operandCtx.bufferType != nullptr);
-      auto bufferMemref = operandCtx.bufferType;
-      auto buffer = rewriter.create<memref::AllocOp>(op.getLoc(), bufferMemref);
-
-      auto stream = rewriter.create<ttir::StreamLayoutOp>(
-          op.getLoc(), streamMemref, operand.get(), buffer);
-
-      rewriter.modifyOpInPlace(op,
-                               [&]() { operand.assign(stream.getResult()); });
-    }
-    return success();
+    return insertStreamImpl(rewriter, operand, op, operandCtx, buffer);
   }
 
   static LogicalResult
   insertStream(RewriterBase &rewriter, OpOperand &operand, ttir::GenericOp op,
                const Planner::Request &req, const OperandContext &operandCtx,
                const MemorySpaceInfo &info, const SequenceMapping &sequencing) {
-    auto operandMemrefType = mlir::cast<MemRefType>(operand.get().getType());
-
     OpBuilder::InsertionGuard guard(rewriter);
-    {
-      // By design, must insert just before the generic op.
-      rewriter.setInsertionPoint(op);
+    rewriter.setInsertionPoint(op);
 
-      auto streamAttr = rewriter.getAttr<ttcore::ViewLayoutAttr>(
-          rewriter.getMultiDimIdentityMap(operandMemrefType.getRank()));
-      auto streamMemref = MemRefType::get(
-          operandMemrefType.getShape(), operandMemrefType.getElementType(),
-          streamAttr, operandMemrefType.getMemorySpace());
+    auto bufferMemref = operandCtx.bufferType;
+    TT_debug(bufferMemref != nullptr);
+    auto buffer = rewriter.create<memref::AllocOp>(op.getLoc(), bufferMemref);
 
-      TT_debug(operandCtx.bufferType != nullptr);
-      auto bufferMemref = operandCtx.bufferType;
-      auto buffer = rewriter.create<memref::AllocOp>(op.getLoc(), bufferMemref);
+    assignAddressAndAlignment(rewriter, buffer, req.offset, info);
+    insertDealloc(rewriter, buffer, req.last, sequencing);
 
-      assignAddressAndAlignment(rewriter, buffer, req.offset, info);
-      insertDealloc(rewriter, buffer, req.last, sequencing);
-
-      auto stream = rewriter.create<ttir::StreamLayoutOp>(
-          op.getLoc(), streamMemref, operand.get(), buffer);
-
-      rewriter.modifyOpInPlace(op,
-                               [&]() { operand.assign(stream.getResult()); });
-    }
-    return success();
+    return insertStreamImpl(rewriter, operand, op, operandCtx, buffer);
   }
 
   // Populates `chain` with the sequence of operations that
