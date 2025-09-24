@@ -10,7 +10,10 @@
 #include "tt/runtime/types.h"
 #include "tt/runtime/utils.h"
 
+#include <cstdlib>
 #include <dlfcn.h>
+#include <fstream>
+#include <sstream>
 
 namespace tt::runtime::test::ttnn {
 
@@ -49,12 +52,55 @@ void *openSo(const std::string &path) {
 }
 
 void closeSo(void *handle) {
+  if (handle == nullptr) {
+    return;
+  }
+
   int ret = dlclose(handle);
 
   if (ret != 0) {
     std::cerr << "Failed to close shared object: " << dlerror() << std::endl;
     exit(ret);
   }
+}
+
+std::vector<std::string> getSoPrograms(void *so) {
+  std::vector<std::string> functionNames;
+
+  if (so == nullptr) {
+    return functionNames;
+  }
+
+  // Get the path of the loaded shared object
+  Dl_info info;
+  if (dladdr(so, &info) == 0) {
+    std::cerr << "Failed to get shared object path" << std::endl;
+    return functionNames;
+  }
+
+  std::string soPath = info.dli_fname;
+  std::string command = "nm -D " + soPath + " | grep ' T ' | awk '{print $3}'";
+
+  FILE *pipe = popen(command.c_str(), "r");
+  if (!pipe) {
+    std::cerr << "Failed to execute nm command" << std::endl;
+    return functionNames;
+  }
+
+  char buffer[256];
+  while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+    std::string funcName = buffer;
+    // Remove newline
+    if (!funcName.empty() && funcName.back() == '\n') {
+      funcName.pop_back();
+    }
+    if (!funcName.empty()) {
+      functionNames.push_back(funcName);
+    }
+  }
+
+  pclose(pipe);
+  return functionNames;
 }
 
 std::vector<::tt::runtime::Tensor>

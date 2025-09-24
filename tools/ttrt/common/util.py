@@ -543,10 +543,7 @@ class FileManager:
 
         if self.is_file(path):
             if self.check_file_exists(path):
-                if (
-                    self.get_file_extension(path)
-                    == Flatbuffer.get_ttsys_file_extension()
-                ):
+                if self.get_file_extension(path) == EmitCDylib.get_so_file_extension():
                     ttsys_files.append(path)
                     self.logging.debug(f"found file={path}")
             else:
@@ -558,7 +555,7 @@ class FileManager:
                     for file in files:
                         if (
                             self.get_file_extension(file)
-                            == Flatbuffer.get_ttsys_file_extension()
+                            == EmitCDylib.get_so_file_extension()
                         ):
                             ttsys_files.append(os.path.join(root, file))
                             self.logging.debug(f"found file={os.path.join(root, file)}")
@@ -568,6 +565,41 @@ class FileManager:
         # Sort files alphabetically to ensure consistent ordering.
         ttsys_files.sort()
         return ttsys_files
+
+    def find_emitc_dylib_paths(self, path):
+        self.logging.debug(f"finding all .so files from={path}")
+        so_files = []
+
+        if self.is_file(path):
+            if self.check_file_exists(path):
+                if self.get_file_extension(path) == EmitCDylib.get_so_file_extension():
+                    so_files.append(path)
+                    self.logging.debug(f"found file={path}")
+            else:
+                self.logging.info(f"file '{path}' not found - skipping")
+        else:
+            self.check_directory_exists(path)
+            try:
+                for root, _, files in os.walk(path):
+                    for file in files:
+                        if (
+                            self.get_file_extension(file)
+                            == EmitCDylib.get_so_file_extension()
+                        ):
+                            so_files.append(os.path.join(root, file))
+                            self.logging.debug(f"found file={os.path.join(root, file)}")
+            except Exception as e:
+                raise Exception(f"an unexpected error occurred: {e}")
+
+        # Sort files alphabetically to ensure consistent ordering.
+        so_files.sort()
+        return so_files
+
+    def find_so_corresponding_ttnn(self, path):
+        ttnn_path = path.replace(".so", ".ttnn")
+        if self.check_file_exists(ttnn_path):
+            return ttnn_path
+        return None
 
 
 class Artifacts:
@@ -1011,6 +1043,24 @@ class SystemDesc(Flatbuffer):
                 "Binary schema mismatch, please recompile the binary with the compiler at the same schema version"
             )
         return True
+
+
+class EmitCDylib:
+    def __init__(self, logger, file_manager, file_path, capsule=None):
+        self.logger = logger
+        self.logging = self.logger.get_logger()
+        self.file_manager = file_manager
+        self.file_path = (
+            file_path if file_path != None else "<binary-from-capsule>"
+        )  # ******
+        # self.name = self.file_manager.get_file_name(file_path)
+
+        # temporary state value to check if test failed
+        self.test_result = "pass"
+
+    @staticmethod
+    def get_so_file_extension():
+        return ".so"
 
 
 class TTRTTestException(Exception):

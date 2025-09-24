@@ -73,7 +73,7 @@ class EmitC:
         EmitC.register_arg(
             name="--result-file",
             type=str,
-            default="perf_results.json",
+            default="emitc_results.json",
             choices=None,
             help="test file to save results to",
         )
@@ -141,7 +141,7 @@ class EmitC:
             help="Enable benchmark mode with warmup and e2e time measurements (automatically enables program cache)",
         )
         EmitC.register_arg(
-            name="binary",
+            name="dylib",
             type=str,
             default="",
             choices=None,
@@ -165,7 +165,7 @@ class EmitC:
             else:
                 # argument got parsed to hyphen's for underscrolls and leading hyphen's removed - need to put back
                 converted_name = name
-                if name != "binary":
+                if name != "dylib":
                     converted_name = converted_name.lstrip("-")
                     converted_name = converted_name.replace("-", "_")
                 self[name] = getattr(args, converted_name)
@@ -183,6 +183,7 @@ class EmitC:
                 artifacts_folder_path=self["--artifact-dir"],
             )
         )
+        self.emitc_dylibs = []
         self.ttnn_binaries = []
         self.results = Results(self.logger, self.file_manager)
 
@@ -200,7 +201,7 @@ class EmitC:
         self.logging.debug(f"------checking constraints for emitc API")
 
         # is this potentially an unneccessary duplicate of run.py?
-        if not hasattr(self, "binary"):
+        if not hasattr(self, "dylib"):
             # load from Capsule instead. only TTNN Path is supported for now
             bin = Binary(self.logger, self.file_manager, "", self["--capsule"])
             if not bin.check_version(ignore=self["--ignore-version"]):
@@ -217,38 +218,19 @@ class EmitC:
                     return
             self.ttnn_binaries.append(bin)
         else:
-            shared_object_paths = self.file_manager.find_shared_object_paths(
-                self["binary"]
-            )
-            ttnn_binary_paths = self.file_manager.find_ttnn_binary_paths(self["binary"])
+            emitc_dylib_paths = self.file_manager.find_emitc_dylib_paths(self["dylib"])
+            ttnn_binary_paths = self.file_manager.find_ttnn_binary_paths(self["dylib"])
 
-            self.logging.debug(f"shared_object_paths={shared_object_paths}")
+            self.logging.debug(f"emitc_dylib_paths={emitc_dylib_paths}")
             self.logging.debug(f"ttnn_binary_paths={ttnn_binary_paths}")
 
-            for path in shared_object_paths:
-                so = SharedObject(self.logger, self.file_manager, path)
-                try:
-                    so.check_version(ignore=self["--ignore-version"])
-                except Exception as e:
-                    test_result = {
-                        "file_path": path,
-                        "result": "skip",
-                        "exception": str(e),
-                        "log_file": self.logger.file_name,
-                        "artifacts": self.artifacts.artifacts_folder_path,
-                        "program_index": self["--program-index"],
-                    }
-                    self.logging.warning(
-                        f"SKIP: test={path} was skipped with exception={str(e)}"
-                    )
-                    self.results.add_result(test_result)
-                    continue
-
-                self.shared_objects.append(so)
-                corresponding_ttnn = self.file_manager.find_corresponding_ttnn(path)
+            for path in emitc_dylib_paths:
+                dylib = EmitCDylib(self.logger, self.file_manager, path)
+                self.emitc_dylibs.append(dylib)
+                corresponding_ttnn = self.file_manager.find_so_corresponding_ttnn(path)
 
                 if corresponding_ttnn:
-                    self.ttnn_binary_paths.append(corresponding_ttnn)
+                    ttnn_binary_paths.append(corresponding_ttnn)
 
             for path in ttnn_binary_paths:
                 bin = Binary(self.logger, self.file_manager, path)
@@ -296,22 +278,24 @@ class EmitC:
     def execute(self):
         self.logging.debug(f"------executing emitc API")
 
-        def _execute(shared_objects):
-            if len(binaries) == 0:
-                self.logging.warning(f"no binaries found to run - returning early")
+        def _execute(emitc_dylibs):
+            if len(emitc_dylibs) == 0:
+                self.logging.warning(f"no EmitC dylibs found to run - returning early")
                 return
 
-            # change this: to for .so files in directory, for each, if there is a matching .ttnn file, run
-            for so in self.shared_objects:
+            # change this: to for .dylib files in directory, for each, if there is a matching .ttnn file, run
+            for dylib in self.emitc_dylibs:
                 try:
-                    # .so are compiled such that they have the same name as flatbuffers, so we rename here
+                    import ttrt.runtime
+
+                    # .dylib are compiled such that they have the same name as flatbuffers, dylib we rename here
                     emitc_dylib_path = (
-                        so.file_path
-                    )  # ***** #bin.file_path.replace(".ttnn", ".so")
+                        dylib.file_path
+                    )  # ***** #bin.file_path.replace(".ttnn", ".dylib")
 
                     compare_to_ttnn = False
-                    if so in self.ttnn_binaries:
-                        bin = self.ttnn_binaries[so]
+                    if dylib in self.ttnn_binaries:
+                        bin = self.ttnn_binaries[dylib]
                         compare_to_ttnn = True
 
                     # Open the dylib
@@ -319,7 +303,10 @@ class EmitC:
                     self.logging.debug(f"opened emitc dylib={emitc_dylib_path}")
 
                     # Run to EmitC
-                    for program_index in program_indices:
+                    # *************
+                    for program_index in ttrt.runtime.test.get_so_programs(
+                        emitc_dylib_handle
+                    ):
                         # Create symbol string to read from dylib
                         fwd_func_name = program.name
 
@@ -426,7 +413,7 @@ class EmitC:
                     if isinstance(e, TTRTTestException):
                         result = "test_error"
                     test_result = {
-                        "file_path": so.file_path,
+                        "file_path": dylib.file_path,
                         "result": result,
                         "exception": str(e),
                         "log_file": self.logger.file_name,
@@ -434,37 +421,37 @@ class EmitC:
                         "program_index": self["--program-index"],
                     }
                     self.logging.error(
-                        f"ERROR: test={so.file_path} experienced an error with exception={str(e)}"
+                        f"ERROR: test={dylib.file_path} experienced an error with exception={str(e)}"
                     )
                     self.results.add_result(test_result)
-                    so.test_result = result
+                    dylib.test_result = result
                     traceback.print_exc()
                     continue
 
-        self.logging.debug(f"executing shared_objects")
-        _execute(self.shared_objects)
-        self.logging.debug(f"finished executing shared_objects")
+        self.logging.debug(f"executing emitc_dylibs")
+        _execute(self.emitc_dylibs)
+        self.logging.debug(f"finished executing emitc_dylibs")
 
         self.logging.debug(f"------finished executing emitc API")
 
     def postprocess(self):
         self.logging.debug(f"------postprocessing emitc API")
 
-        for so in self.shared_objects:
-            if so.test_result == "pass":
+        for dylib in self.emitc_dylibs:
+            if dylib.test_result == "pass":
                 test_result = {
-                    "file_path": bin.file_path,
+                    "file_path": dylib.file_path,
                     "result": "pass",
                     "exception": "",
                     "log_file": self.logger.file_name,
                     "artifacts": self.artifacts.artifacts_folder_path,
                     "program_index": self["--program-index"],
-                    "program_results": so.program_results,
+                    # "program_results": dylib.program_results,
                 }
                 self.results.add_result(test_result)
-                self.logging.info(f"PASS: test case={so.file_path}")
+                self.logging.info(f"PASS: test case={dylib.file_path}")
             else:
-                self.logging.error(f"ERROR: test case={so.file_path}")
+                self.logging.error(f"ERROR: test case={dylib.file_path}")
 
         self.results.save_results(self["--result-file"])
 
@@ -504,12 +491,12 @@ class EmitC:
     @staticmethod
     def generate_subparser(subparsers):
         emitc_parser = subparsers.add_parser(
-            "emitc", help="run performance trace and collect performance data"
+            "emitc", help="run EmitC Dylib tests and optionally compare outputs to TTNN"
         )
         emitc_parser.set_defaults(api=EmitC)
 
         for name, attributes in EmitC.registered_args.items():
-            if name == "binary":
+            if name == "dylib":
                 emitc_parser.add_argument(f"{name}", help=attributes["help"])
             elif attributes["type"] == bool:
                 emitc_parser.add_argument(

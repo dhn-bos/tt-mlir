@@ -22,9 +22,7 @@ from ttrt.common.query import Query
 from ttrt.common.check import Check
 from ttrt.common.run import Run
 from ttrt.common.perf import Perf
-
-# from ttrt.common.emitc import EmitC
-# from ttrt.common.emitpy import EmitPy
+from ttrt.common.emitc import EmitC
 
 
 class API:
