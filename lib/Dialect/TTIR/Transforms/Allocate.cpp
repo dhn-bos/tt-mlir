@@ -145,6 +145,7 @@ struct MemrefValueContext {
   int32_t varIndex = -1; // Needed to retrieve `Planner::Variable::placement`.
   int32_t reqIndex = -1; // Needed to retrieve `Planner::Request::offset`.
 
+  // `true` if a `ttir.ttnn_metal_layout_cast`
   bool isCastOp = false;
 };
 
@@ -486,16 +487,12 @@ class TTIRAllocate final : public impl::TTIRAllocateBase<TTIRAllocate> {
             memref.getDefiningOp()
                 ? mlir::isa<ttir::TTNNMetalLayoutCastOp>(memref.getDefiningOp())
                 : false;
-        // if (memrefCtx.isCastOp) {
-        //   genericCtx.operands.try_emplace(memref, std::move(streamCtx));
-        //   continue;
-        // }
 
         if (inserted) {
           // These were not discovered by the earlier `analyzeAllocOps()`, it
-          // could only happen if the value is a block arg or a cast op
-          TT_debugv(mlir::isa<BlockArgument>(memref),
-                    "expected a block arg: {}", memref);
+          // could only happen if the value is a block arg or a cast op.
+          TT_debugv(mlir::isa<BlockArgument>(memref) || !memrefCtx.isCastOp,
+                    "expected a block arg or cast op: {}", memref);
           memrefCtx.type = mlir::cast<MemRefType>(memref.getType());
           memrefCtx.size = device.getMemrefSizeBytes(memrefCtx.type);
         } else {
