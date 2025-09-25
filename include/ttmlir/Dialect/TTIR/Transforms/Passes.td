@@ -455,8 +455,8 @@ def TTIRAllocate: Pass<"ttir-allocate", "::mlir::ModuleOp"> {
 }
 
 
-def TTIRAlwaysInsertStreams: Pass<"ttir-always-insert-streams", "::mlir::ModuleOp"> {
-  let summary = "Always create streams for TTIR generic ops.";
+def TTIRInsertStreams: Pass<"ttir-insert-streams", "::mlir::ModuleOp"> {
+  let summary = "Always insert streams for TTIR generic ops.";
   let description = [{
     This pass is only available for D2M/TTNN integration (i.e.: when ttnn-mode is on). This pass will aggressively
     insert a stream for all inputs/outputs of the TTIR generic op.
@@ -464,6 +464,12 @@ def TTIRAlwaysInsertStreams: Pass<"ttir-always-insert-streams", "::mlir::ModuleO
     Example:
   }];
   let dependentDialects = ["::mlir::tt::ttcore::TTCoreDialect", "::mlir::memref::MemRefDialect"];
+  let options = [
+    Option<"numStreamBuffers",
+           "num-stream-buffers",
+           "unsigned", /*default=*/"2",
+           "Number of backing buffers to allocate per stream storage (>=1) Default is 2.">,
+  ];
 }
 
 def TTIRImplicitBroadcastFold: Pass<"ttir-implicit-broadcast-fold", "::mlir::ModuleOp"> {

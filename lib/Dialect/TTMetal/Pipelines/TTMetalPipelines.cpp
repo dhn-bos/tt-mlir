@@ -100,7 +100,9 @@ void createTTIRToTTMetalMiddleendPipeline(
     OpPassManager &pm, const TTIRToTTMetalPipelineOptions &options) {
   createTTIRBufferizationPipeline(pm, options);
   if (options.ttnnMode) {
-    pm.addPass(ttir::createTTIRAlwaysInsertStreams());
+    ttir::TTIRInsertStreamsOptions insertStreamsOptions;
+    { insertStreamsOptions.numStreamBuffers = options.numStreamBuffers; }
+    pm.addPass(ttir::createTTIRInsertStreams(insertStreamsOptions));
   } else {
     ttir::TTIRAllocateOptions allocateOptions;
     {
