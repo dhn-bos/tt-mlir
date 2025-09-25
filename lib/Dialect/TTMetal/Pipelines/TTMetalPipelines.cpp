@@ -99,12 +99,17 @@ void createTTIRToTTMetalFrontendPipeline(
 void createTTIRToTTMetalMiddleendPipeline(
     OpPassManager &pm, const TTIRToTTMetalPipelineOptions &options) {
   createTTIRBufferizationPipeline(pm, options);
-  ttir::TTIRAllocateOptions allocateOptions;
-  {
-    allocateOptions.numStreamBuffers = options.numStreamBuffers;
-    allocateOptions.allowOutputSpilling = options.allowOutputSpilling;
+  if (options.ttnnMode) {
+    pm.addPass(ttir::createTTIRAlwaysInsertStreams());
+  } else {
+    ttir::TTIRAllocateOptions allocateOptions;
+    {
+      allocateOptions.numStreamBuffers = options.numStreamBuffers;
+      allocateOptions.allowOutputSpilling = options.allowOutputSpilling;
+    }
+    pm.addPass(ttir::createTTIRAllocate(allocateOptions));
   }
-  pm.addPass(ttir::createTTIRAllocate(allocateOptions));
+
   pm.addPass(createCanonicalizerPassWithOptions(options));
   ttir::TTIRGenericApplyInterchangeOptions applyInterchangeOptions;
   {

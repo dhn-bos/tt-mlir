@@ -14,6 +14,7 @@ add_mlir_dialect_library(MLIRTTIRTransforms
         GenericApplyInterchange.cpp
         GenericTileComputeLoops.cpp
         HoistCPUOps.cpp
+        InsertStreams.cpp
         ElementTypeNormalization.cpp
         LowerToLayout.cpp
         Quantization.cpp
