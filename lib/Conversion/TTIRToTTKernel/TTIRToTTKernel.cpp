@@ -1120,12 +1120,10 @@ public:
     auto arg =
         rewriter.getAttr<ArgAttr>(ArgType::BufferAddress, op.getOperandIndex());
     size_t argIndex;
-    rewriter.modifyOpInPlace(entry, [&]() {
-      argIndex = ArgSpecAttr::appendCompileTimeArg(entry, arg);
-    });
-
-    rewriter.replaceOpWithNewOp<ttkernel::GetCompileArgValOp>(
-        op, rewriter.getI32Type(), argIndex);
+    rewriter.modifyOpInPlace(
+        entry, [&]() { argIndex = ArgSpecAttr::appendRuntimeArg(entry, arg); });
+    rewriter.replaceOpWithNewOp<ttkernel::GetCommonArgValOp>(
+        op, rewriter.getI32Type(), index(rewriter, op->getLoc(), argIndex));
 
     return success();
   }
