@@ -23,6 +23,7 @@ import operator
 
 from ttrt.common.util import *
 from ttrt.common.query import Query
+from ttrt.common.run import Run
 
 
 class EmitC:
@@ -187,6 +188,43 @@ class EmitC:
         self.emitc_dylibs = []
         self.ttnn_binaries = {}
         self.results = Results(self.logger, self.file_manager)
+        command_options = f"--program-index {self['--program-index']} --loops {self['--loops']} --save-artifacts "
+
+        if self["--memory"]:
+            command_options += " --memory "
+
+        if self["--disable-eth-dispatch"]:
+            command_options += " --disable-eth-dispatch "
+
+        if self["--disable-golden"]:
+            command_options += " --disable-golden "
+
+        if self["--enable-program-cache"]:
+            command_options += " --enable-program-cache "
+
+        if self["--dump-device-rate"] != 1000:
+            command_options += f" --dump-device-rate {self['--dump-device-rate']} "
+
+        if self["--benchmark"]:
+            command_options += " --benchmark "
+
+        if self["--ignore-version"]:
+            command_options += " --ignore-version "
+
+        if self["--disable-ttrt-callbacks"]:
+            command_options += " --disable-ttrt-callbacks "
+
+        ttrt_executable_path = shutil.which("ttrt")
+        test_command = f"{ttrt_executable_path} run ttir-builder-artifacts/test_reciprocal[emitc-f32-128x128] {command_options}"
+        command_options = {
+            "binary": "ttir-builder-artifacts/test_reciprocal[emitc-f32-128x128]",
+            "--log-file": self["--log-file"],
+            "--artifact-dir": self["--artifact-dir"],
+            "--program-index": self["--program-index"],
+            "--loops": self["--loops"],
+            "--save-artifacts": True,
+        }
+        self.run_object = Run(command_options, self.logger, self.artifacts)
 
     def preprocess(self):
         self.logging.debug(f"------preprocessing emitc API")
@@ -214,12 +252,44 @@ class EmitC:
                 bin = Binary(self.logger, self.file_manager, corresponding_ttnn_path)
                 self.ttnn_binaries[dylib] = bin
 
-        # Do I want to print ttnn binary paths found?
-
         self.logging.debug(f"------finished checking constraints for emitc API")
 
     def execute(self):
         import ttrt.runtime
+
+        def convert_input_layouts(device, inputs, fbb, program_index):
+            import ttrt.runtime
+
+            inputs_converted = []
+            for input_index in range(len(inputs)):
+                input_layout = ttrt.runtime.get_layout(fbb, program_index, input_index)
+                inputs_converted.append(
+                    ttrt.runtime.to_layout(
+                        inputs[input_index], device, input_layout, True
+                    )
+                )
+            return inputs_converted
+
+        def create_tensor(tensor):
+            # Empty tensor if any of the dim is zero.
+            isEmptyTensor = not all(tensor.shape)
+
+            if isEmptyTensor:
+                return ttrt.runtime.create_owned_host_tensor(
+                    tensor.data_ptr(),
+                    list(tensor.shape),
+                    list(tensor.stride()),
+                    tensor.element_size(),
+                    Binary.Program.to_data_type(tensor.dtype),
+                )
+
+            return ttrt.runtime.create_borrowed_host_tensor(
+                tensor.data_ptr(),
+                list(tensor.shape),
+                list(tensor.stride()),
+                tensor.element_size(),
+                Binary.Program.to_data_type(tensor.dtype),
+            )
 
         self.logging.debug(f"------executing emitc API")
 
@@ -229,20 +299,8 @@ class EmitC:
             self.logging.warning(f"no EmitC dylibs found to run - returning early")
             return
 
-        dispatch_core_type = ttrt.runtime.DispatchCoreType.ETH
-
-        if self["--disable-eth-dispatch"]:
-            dispatch_core_type = ttrt.runtime.DispatchCoreType.WORKER
-
         if "--init" in sys.argv:
             self["--disable-golden"] = True
-
-        # ***********
-        num_devices = 2  # len(self.query.device_ids)
-        mesh_options = ttrt.runtime.MeshDeviceOptions()
-        mesh_options.dispatch_core_type = dispatch_core_type
-        mesh_options.enable_program_cache = self["--enable-program-cache"]
-        mesh_options.trace_region_size = self["--trace-region-size"]
 
         # Initialize `device` to `None` for error handling in case device opening fails
         device = None
@@ -254,50 +312,6 @@ class EmitC:
                 if dylib in self.ttnn_binaries:
                     bin = self.ttnn_binaries[dylib]
                     compare_to_ttnn = True
-
-                # ***** Will need another solution if no ttnn
-                fb_mesh_shape = bin.get_program(0).mesh_shape
-                num_mesh_devices = reduce(operator.mul, fb_mesh_shape, 1)
-                mesh_options.mesh_shape = fb_mesh_shape
-
-                # Verify that the expected number of devices in the fb mesh shape is valid on this system
-                if num_mesh_devices > num_devices:
-                    raise Exception(
-                        f"Not enough devices ({num_devices}) to run program with mesh shape {fb_mesh_shape}"
-                    )
-
-                if num_mesh_devices > 1 and self["--fabric-config"] is not None:
-                    ttrt.runtime.set_fabric_config(
-                        parse_fabric_config(self["--fabric-config"])
-                    )
-
-                # Open a device of shape (x,y), where (x,y) is the mesh shape supplied by the flatbuffer
-                device = ttrt.runtime.open_mesh_device(mesh_options)
-
-                # Open the dylib
-                emitc_dylib_handle = ttrt.runtime.test.open_so(dylib.file_path)
-                self.logging.debug(f"opened emitc dylib={dylib.file_path}")
-
-                # Run to EmitC
-                # ************* MAKE SURE NAMES IN ORDER
-                program_names = ttrt.runtime.test.get_so_programs(emitc_dylib_handle)
-                print("PROGRAM_NAMES", program_names)
-                for program_index in range(len(program_names)):
-                    # pre-upload inputs
-                    # ****** this will be a problem if no ttnn to compare to
-                    inputs = convert_input_layouts(
-                        device, inputs, bin.fbb, program_index
-                    )
-
-                    for loop in range(self["--loops"]):
-                        emitc_outs = ttrt.runtime.test.run_so_program(
-                            emitc_dylib_handle,
-                            program_names[program_index],
-                            inputs,
-                            device,
-                        )
-
-                ttrt.runtime.test.close_so(emitc_dylib_handle)
 
                 if compare_to_ttnn:
                     command_options = f"--program-index {self['--program-index']} --loops {self['--loops']} --save-artifacts "
@@ -335,48 +349,75 @@ class EmitC:
                     self.logging.info(
                         f"test command for binary={bin.file_path} is: {test_command}"
                     )
-                    testProcess = subprocess.Popen(
-                        [test_command],
-                        shell=True,
-                        preexec_fn=os.setsid,
+                    # testProcess = subprocess.Popen(
+                    #    [test_command],
+                    #    shell=True,
+                    #    preexec_fn=os.setsid,
+                    # )
+                    self.run_object()
+
+                # Open a device of shape (x,y), where (x,y) is the mesh shape supplied by the flatbuffer
+                device = ttrt.runtime.open_mesh_device(self.run_object.mesh_options)
+
+                # Open the dylib
+                emitc_dylib_handle = ttrt.runtime.test.open_so(dylib.file_path)
+                self.logging.debug(f"opened emitc dylib={dylib.file_path}")
+
+                # Run to EmitC
+                program_names = ttrt.runtime.test.get_so_programs(emitc_dylib_handle)
+                program_names = ["reciprocal"]  # *******
+
+                fbb_input_tensors = self.load_tensors_from_artifacts(bin, "input")
+                fbb_output_tensors = self.load_tensors_from_artifacts(
+                    bin, "device_output"
+                )
+
+                for program_index in range(len(program_names)):
+                    runtime_inputs = []
+                    for i in fbb_input_tensors["program_0"]:
+                        new_input = create_tensor(i)
+                        runtime_inputs.append(new_input)
+
+                    # pre-upload inputs
+                    inputs = convert_input_layouts(
+                        device, runtime_inputs, bin.fbb, program_index
                     )
 
-                    fbb_output_tensors = self.load_output_tensors_from_artifacts(bin)
-
-                    # post-process test results
-                    # I mean this just can't be necessary right?
-                    """
-                    test_result = []
-                    with open("run_results.json", "r") as file:
-                        test_result = json.load(file)
-
-                    for result in test_result:
-                        if result["result"] != "pass":
-                            if result["result"] == "test_error":
-                                raise TTRTTestException(str(result["exception"]))
-                            raise Exception(f'{result["exception"]}')
-                    """
-                    emitc_outs = [
-                        ttrt.runtime.to_host(emitc_out, untilize=True)[0]
-                        for emitc_out in emitc_outs
-                    ]
-                    self.logging.debug(
-                        f"got emitc outputs for program_index={program_index}, loop={loop}"
-                    )
-
-                    all_tensors_match = ttrt.runtime.test.compare_outs(
-                        outputs, emitc_outs
-                    )
-
-                    if not all_tensors_match:
-                        self.logging.error(
-                            "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+                    for loop in range(self["--loops"]):
+                        emitc_outs = ttrt.runtime.test.run_so_program(
+                            emitc_dylib_handle,
+                            program_names[program_index],
+                            inputs,
+                            device,
                         )
-                        self.logging.error(outputs, emitc_outs)
-                        raise Exception(
-                            "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+
+                    if compare_to_ttnn:
+                        runtime_outputs = []
+                        for i in fbb_output_tensors["program_0"]:  # *******
+                            new_output = create_tensor(i)
+                            runtime_outputs.append(new_output)
+
+                        emitc_outs = [
+                            ttrt.runtime.to_host(emitc_out, untilize=True)[0]
+                            for emitc_out in emitc_outs
+                        ]
+                        self.logging.debug(
+                            f"got emitc outputs for program_index={program_index}, loop={loop}"
                         )
-                    self.logging.info(f"EmitC tensors match for {bin.file_path}")
+
+                        all_tensors_match = ttrt.runtime.test.compare_outs(
+                            runtime_outputs, emitc_outs
+                        )
+
+                        if not all_tensors_match:
+                            self.logging.error(
+                                "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+                            )
+                            self.logging.error(fbb_output_tensors, emitc_outs)
+                            raise Exception(
+                                "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+                            )
+                        self.logging.info(f"EmitC tensors match for {bin.file_path}")
             except Exception as e:
                 result = "error"
                 if isinstance(e, TTRTTestException):
@@ -401,6 +442,8 @@ class EmitC:
                 if device is not None:
                     ttrt.runtime.close_mesh_device(device)
                     device = None
+
+                ttrt.runtime.test.close_so(emitc_dylib_handle)
 
         self.logging.debug(f"finished executing emitc_dylibs")
 
@@ -487,37 +530,29 @@ class EmitC:
 
         return emitc_parser
 
-
-def load_output_tensors_from_artifacts(self, bin):
-    """
-    Open directory, loop through subdirectories, load all .pt files into torch tensors, and save them according to their respective program.
-    """
-    fbb_run_directory = self.artifacts.get_binary_run_folder_path(bin)
-    program_tensors = {}
-    saved_tensors = {}
-
-    self.logging.debug(f"Loading .pt tensors from directory: {fbb_run_directory}")
-
-    for root, dirs, files in os.walk(fbb_run_directory):
-
-        # second for loop may be unnecessary
-        for directory in dirs:
+    def load_tensors_from_artifacts(self, bin, key):
+        """
+        Open directory, loop through subdirectories, load all .pt files into torch tensors, and save them according to their respective program.
+        """
+        fbb_run_directory = self.artifacts.get_binary_run_folder_path(bin)
+        program_tensors = {}
+        program_names = [d for d in os.listdir(fbb_run_directory)]
+        self.logging.debug(f"Loading .pt tensors from directory: {fbb_run_directory}")
+        for program in program_names:
+            program_dir = os.path.join(fbb_run_directory, program)
+            files = [d for d in os.listdir(program_dir)]
             tensors = []
-            for pt_file in directory:
-                if pt_file.endswith(".pt") and "output" in pt_file:
-
+            for file in files:
+                file = os.path.join(program_dir, file)
+                if file.endswith(".pt") and key in file:
                     try:
-                        self.logging.debug(
-                            f"Loading output tensor from file: {pt_file}"
-                        )
-                        tensors.append(torch.load(pt_file))
-
+                        tensors.append(torch.load(file, weights_only=True))
+                        self.logging.debug(f"Loading tensor from file: {file}")
                     except Exception as e:
-                        self.logging.error(
-                            f"Error loading .pt file {pt_file}: {str(e)}"
+                        raise Exception(
+                            f"Error loading tensor from file {file}: {str(e)}"
                         )
-                        continue
 
-            program_tensors[directory] = tensors
+            program_tensors[program] = tensors
 
-    return program_tensors
+        return program_tensors

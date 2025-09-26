@@ -595,10 +595,10 @@ class Run:
                 self["--disable-golden"] = True
 
             num_devices = len(self.query.device_ids)
-            mesh_options = ttrt.runtime.MeshDeviceOptions()
-            mesh_options.dispatch_core_type = dispatch_core_type
-            mesh_options.enable_program_cache = self["--enable-program-cache"]
-            mesh_options.trace_region_size = self["--trace-region-size"]
+            self.mesh_options = ttrt.runtime.MeshDeviceOptions()
+            self.mesh_options.dispatch_core_type = dispatch_core_type
+            self.mesh_options.enable_program_cache = self["--enable-program-cache"]
+            self.mesh_options.trace_region_size = self["--trace-region-size"]
 
             # Initialize `device` to `None` for error handling in case device opening fails
             device = None
@@ -609,7 +609,7 @@ class Run:
 
                     fb_mesh_shape = bin.get_program(0).mesh_shape
                     num_mesh_devices = reduce(operator.mul, fb_mesh_shape, 1)
-                    mesh_options.mesh_shape = fb_mesh_shape
+                    self.mesh_options.mesh_shape = fb_mesh_shape
 
                     # Verify that the expected number of devices in the fb mesh shape is valid on this system
                     if num_mesh_devices > num_devices:
@@ -622,7 +622,7 @@ class Run:
                             parse_fabric_config(self["--fabric-config"])
                         )
                     # Open a device of shape (x,y), where (x,y) is the mesh shape supplied by the flatbuffer
-                    device = ttrt.runtime.open_mesh_device(mesh_options)
+                    device = ttrt.runtime.open_mesh_device(self.mesh_options)
 
                     self.logging.info(f"evaluating binary={bin.file_path}")
 

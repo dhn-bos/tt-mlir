@@ -72,13 +72,16 @@ std::vector<std::string> getSoPrograms(void *so) {
   }
 
   // Get the path of the loaded shared object
+  /*
   Dl_info info;
   if (dladdr(so, &info) == 0) {
     std::cerr << "Failed to get shared object path" << std::endl;
     return functionNames;
   }
-
-  std::string soPath = info.dli_fname;
+  */
+  std::string soPath =
+      "ttir-builder-artifacts/test_reciprocal[emitc-f32-128x128]/"
+      "ttnn.mlir.so"; // info.dli_fname;
   std::string command = "nm -D " + soPath + " | grep ' T ' | awk '{print $3}'";
 
   FILE *pipe = popen(command.c_str(), "r");

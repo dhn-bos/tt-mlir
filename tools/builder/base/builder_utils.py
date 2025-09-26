@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import shutil
 import inspect
 import subprocess
 import torch
@@ -277,7 +278,7 @@ def build_ttir_module(
         print(f"`{fn.__name__}` successfully transformed into a MLIR module.")
         base = fn.__name__ if base is None else base
         filename = _get_target_path(
-            output_root, "ttir-builder-artifacts", "ttir.mlir", base
+            output_root, "ttir-builder-artifacts", base + "_ttir.mlir", "ttir"
         )
 
         if module_dump:
@@ -407,6 +408,13 @@ def compile_ttir_to_flatbuffer(
             pipeline_options=pipeline_options,
             print_ir=print_ir,
         )
+
+        # Copy the compiled ttnn flatbuffer to emitc for ttrt comparison
+        src_file = _get_target_path(
+            output_root, "ttir-builder-artifacts", test_base + "_ttnn.mlir.ttnn", "ttnn"
+        )
+        dst_dir = os.path.join(output_root, "ttir-builder-artifacts", "emitc")
+        shutil.copy2(src_file, dst_dir)
 
     # Compile model to TTIR MLIR
     try:
@@ -575,7 +583,7 @@ def build_stablehlo_module(
         print(f"`{fn.__name__}` successfully transformed into a MLIR module.")
         base = fn.__name__ if base is None else base
         filename = _get_target_path(
-            output_root, "stablehlo-builder-artifacts", "shlo.mlir", base
+            output_root, "stablehlo-builder-artifacts", base + "_shlo.mlir", "shlo"
         )
 
         if module_dump:
@@ -701,7 +709,10 @@ def compile_stablehlo_to_flatbuffer(
     print(module)
 
     filename = _get_target_path(
-        output_root, "stablehlo-builder-artifacts", "shlo_pipeline.mlir", test_base
+        output_root,
+        "stablehlo-builder-artifacts",
+        test_base + "_shlo_pipeline.mlir",
+        "shlo_pipeline",
     )
     if module_dump:
         with open(filename, "w") as f:
@@ -712,7 +723,7 @@ def compile_stablehlo_to_flatbuffer(
     print(module)
 
     filename = _get_target_path(
-        output_root, "stablehlo-builder-artifacts", "ttir.mlir", test_base
+        output_root, "stablehlo-builder-artifacts", test_base + "_ttir.mlir", "ttir"
     )
     if module_dump:
         with open(filename, "w") as f:
@@ -824,14 +835,14 @@ def compile_ttir_module_to_flatbuffer(
             custom_pipeline if custom_pipeline else ttir_to_ttnn_backend_pipeline
         )
         to_target = ttnn_to_flatbuffer_file
-        filename = "ttnn.mlir"
+        mlir_suffix = "_ttnn.mlir"
         target_extension = "ttnn"
     elif target == "ttmetal":
         pipeline_fn = (
             custom_pipeline if custom_pipeline else ttir_to_ttmetal_backend_pipeline
         )
         to_target = ttmetal_to_flatbuffer_file
-        filename = "ttm.mlir"
+        mlir_suffix = "_ttm.mlir"
         target_extension = "ttm"
     elif target == "emitc":
         ttir_to_ttnn_emitc_pipeline = _create_custom_ttir_pipeline_fn(
@@ -841,18 +852,21 @@ def compile_ttir_module_to_flatbuffer(
             custom_pipeline if custom_pipeline else ttir_to_ttnn_emitc_pipeline
         )
         to_target = _emitc_to_executable
-        filename = "ttnn.mlir"
+        mlir_suffix = "_ttnn.mlir"
         target_extension = "cpp"
     elif target == "emitpy":
         pipeline_fn = custom_pipeline if custom_pipeline else ttir_to_emitpy_pipeline
         to_target = _emitpy_to_executable
-        filename = "ttnn.mlir"
+        mlir_suffix = "_ttnn.mlir"
         target_extension = "py"
     else:
         raise ValueError("Unsupported target: " + target)
 
-    output_file_mlir = _get_target_path(output_root, builder_dir, filename, test_base)
+    output_file_mlir = _get_target_path(
+        output_root, builder_dir, test_base + mlir_suffix, target
+    )
     output_file_fbb = ".".join([output_file_mlir, target_extension])
+    print(output_file_mlir, output_file_fbb)
 
     # Compile TTIR MLIR -> TT{Metal,NN} MLIR
     try:
