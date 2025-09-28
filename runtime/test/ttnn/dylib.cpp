@@ -64,7 +64,7 @@ void closeSo(void *handle) {
   }
 }
 
-std::vector<std::string> getSoPrograms(void *so) {
+std::vector<std::string> getSoPrograms(void *so, const std::string &path) {
   std::vector<std::string> functionNames;
 
   if (so == nullptr) {
@@ -79,10 +79,10 @@ std::vector<std::string> getSoPrograms(void *so) {
     return functionNames;
   }
   */
-  std::string soPath =
-      "ttir-builder-artifacts/test_reciprocal[emitc-f32-128x128]/"
-      "ttnn.mlir.so"; // info.dli_fname;
-  std::string command = "nm -D " + soPath + " | grep ' T ' | awk '{print $3}'";
+  // std::string soPath =
+  //     "ttir-builder-artifacts/emitc/"
+  //     "test_reciprocal[emitc-f32-128x128]_ttnn.mlir.so"; // info.dli_fname;
+  std::string command = "nm -D -C " + path + " | grep ' T ' | awk '{print $3}'";
 
   FILE *pipe = popen(command.c_str(), "r");
   if (!pipe) {
@@ -103,7 +103,23 @@ std::vector<std::string> getSoPrograms(void *so) {
   }
 
   pclose(pipe);
-  return functionNames;
+
+  // Clean the function names to remove parameter signatures
+  std::vector<std::string> cleanedNames;
+  for (const auto &name : functionNames) {
+    size_t pos = name.find("(");
+    std::string cleanName =
+        (pos != std::string::npos) ? name.substr(0, pos) : name;
+
+    // skip function names that are not actual programs
+    if (cleanName != "setDevice" && cleanName != "main" &&
+        cleanName != "ttnn::constEvalFuncWrapper" &&
+        "create_inputs_for_" != cleanName.substr(0, 18)) {
+      cleanedNames.push_back(cleanName);
+    }
+  }
+
+  return cleanedNames;
 }
 
 std::vector<::tt::runtime::Tensor>

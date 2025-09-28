@@ -215,15 +215,17 @@ class EmitC:
             command_options += " --disable-ttrt-callbacks "
 
         ttrt_executable_path = shutil.which("ttrt")
-        test_command = f"{ttrt_executable_path} run ttir-builder-artifacts/test_reciprocal[emitc-f32-128x128] {command_options}"
+        test_command = f"{ttrt_executable_path} run zztemp {command_options}"
         command_options = {
-            "binary": "ttir-builder-artifacts/test_reciprocal[emitc-f32-128x128]",
+            "binary": self["dylib"],
             "--log-file": self["--log-file"],
             "--artifact-dir": self["--artifact-dir"],
             "--program-index": self["--program-index"],
             "--loops": self["--loops"],
             "--save-artifacts": True,
+            "--ignore-version": self["--ignore-version"],
         }
+        print(command_options)
         self.run_object = Run(command_options, self.logger, self.artifacts)
 
     def preprocess(self):
@@ -364,8 +366,9 @@ class EmitC:
                 self.logging.debug(f"opened emitc dylib={dylib.file_path}")
 
                 # Run to EmitC
-                program_names = ttrt.runtime.test.get_so_programs(emitc_dylib_handle)
-                program_names = ["reciprocal"]  # *******
+                program_names = ttrt.runtime.test.get_so_programs(
+                    emitc_dylib_handle, dylib.file_path
+                )
 
                 fbb_input_tensors = self.load_tensors_from_artifacts(bin, "input")
                 fbb_output_tensors = self.load_tensors_from_artifacts(
@@ -373,12 +376,16 @@ class EmitC:
                 )
 
                 for program_index in range(len(program_names)):
+                    program_name = "program_" + str(
+                        program_index
+                    )  # program_names[program_index]
                     runtime_inputs = []
-                    for i in fbb_input_tensors["program_0"]:
+                    for i in fbb_input_tensors[program_name]:
                         new_input = create_tensor(i)
                         runtime_inputs.append(new_input)
 
                     # pre-upload inputs
+                    # ***** Will have to figure out layout conversion here *****
                     inputs = convert_input_layouts(
                         device, runtime_inputs, bin.fbb, program_index
                     )
@@ -393,7 +400,7 @@ class EmitC:
 
                     if compare_to_ttnn:
                         runtime_outputs = []
-                        for i in fbb_output_tensors["program_0"]:  # *******
+                        for i in fbb_output_tensors[program_name]:  # *******
                             new_output = create_tensor(i)
                             runtime_outputs.append(new_output)
 
@@ -443,7 +450,7 @@ class EmitC:
                     ttrt.runtime.close_mesh_device(device)
                     device = None
 
-                ttrt.runtime.test.close_so(emitc_dylib_handle)
+                # ttrt.runtime.test.close_so(emitc_dylib_handle)
 
         self.logging.debug(f"finished executing emitc_dylibs")
 
