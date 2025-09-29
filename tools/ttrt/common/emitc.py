@@ -534,7 +534,7 @@ class EmitC:
         self.logging.debug(f"Loading .pt tensors from directory: {fbb_run_directory}")
         for program in program_names:
             program_dir = os.path.join(fbb_run_directory, program)
-            files = [d for d in os.listdir(program_dir)]
+            files = sorted([d for d in os.listdir(program_dir)])
             tensors = []
             for file in files:
                 file = os.path.join(program_dir, file)
