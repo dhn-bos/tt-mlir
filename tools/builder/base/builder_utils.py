@@ -932,32 +932,6 @@ def compile_ttir_module_to_flatbuffer(
 
     print(f"{target} flatbuffer created successfully at: {output_file_fbb}")
 
-    # Generate a .so flatbuffer file from the .cpp file
-    if target == "emitc":
-        print("zzz", os.environ["TT_METAL_HOME"])
-        print(os.getcwd())
-        print(os.environ)
-        print(os.environ["LD_LIBRARY_PATH"])
-        # Set TT_METAL_HOME for the subprocess call, temporary until builder is decoupled from ttrt
-        if "ttrt" in os.environ["TT_METAL_HOME"]:
-            tt_metal_home = os.path.abspath(
-                os.path.join(
-                    os.path.dirname(__file__),
-                    "../../../../third_party/tt-metal/src/tt-metal",
-                )
-            )
-            os.environ["TT_METAL_HOME"] = tt_metal_home
-        print("zzz", os.environ["TT_METAL_HOME"])
-        subprocess.run(
-            [
-                "tools/ttnn-standalone/ci_compile_dylib.py",
-                "--file",
-                output_file_fbb,
-            ],
-            env=os.environ,
-            check=True,
-        )
-
     return output_file_mlir
 
 

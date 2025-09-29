@@ -350,13 +350,7 @@ jobs:
         export TT_METAL_HOME="${{ steps.strings.outputs.install-output-dir }}/tt-metal"
         export TT_METAL_LIB="${{ steps.strings.outputs.install-output-dir }}/lib"
         export LD_LIBRARY_PATH="${{ steps.strings.outputs.install-output-dir }}/lib:${TTMLIR_TOOLCHAIN_DIR}/lib:${LD_LIBRARY_PATH}"
-        pwd
-        echo $TT_METAL_HOME
-        echo $TT_METAL_LIB
-        echo $LD_LIBRARY_PATH
         cd ${{ steps.strings.outputs.install-output-dir }}/${{ matrix.build.path }}
-        pwd
-        ls
         ./ttnn-standalone
 
     - name: Builder Tests
@@ -364,10 +358,9 @@ jobs:
       shell: bash
       run: |
         source env/activate
-        export LD_LIBRARY_PATH="${{ steps.strings.outputs.install-output-dir }}/lib:${TTMLIR_TOOLCHAIN_DIR}/lib:${LD_LIBRARY_PATH}"
-        export SYSTEM_DESC_PATH="${GITHUB_WORKSPACE}/ttrt-artifacts/system_desc.ttsys"
-        ln -sf ${{ steps.strings.outputs.install-output-dir }} ${{ steps.strings.outputs.build-output-dir }}
         pytest ${{ matrix.build.path }} ${{ matrix.build.flags }} -v --junit-xml=${{ steps.strings.outputs.test_report_path }}
+        python3 tools/ttnn-standalone/ci_compile_dylib.py --dir ttir-builder-artifacts/emitc/
+        python3 tools/ttnn-standalone/ci_compile_dylib.py --dir stablehlo-builder-artifacts/emitc/
         if [[ "${{ matrix.build.run-ttrt }}" == "true" ]]; then
           ttrt run ${{ matrix.build.ttrt-flags }} ttir-builder-artifacts/
           ttrt run ${{ matrix.build.ttrt-flags }} stablehlo-builder-artifacts/
