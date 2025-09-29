@@ -38,6 +38,35 @@ static std::string getMangledName(std::string_view funcName) {
   return mangledName;
 }
 
+// The names of input creation functions are mangled unpredictably
+static std::string getCreateInputsMangledName(std::string_view funcName,
+                                              std::string path) {
+  std::string command = "nm -D " + path + " | grep ' T ' | awk '{print $3}'";
+
+  FILE *pipe = popen(command.c_str(), "r");
+  if (!pipe) {
+    std::cerr << "Failed to execute command to get mangled function name"
+              << std::endl;
+    throw std::runtime_error(
+        "Failed to execute command to get mangled function name");
+  }
+
+  char buffer[256];
+  while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+    std::string funcName = buffer;
+    // Remove newline
+    if (!funcName.empty() && funcName.back() == '\n') {
+      funcName.pop_back();
+    }
+    if (funcName.find("create_inputs_for_") != std::string::npos &&
+        funcName.find(funcName) != std::string::npos) {
+      return funcName;
+    }
+  }
+  throw std::runtime_error("Failed to find mangled function name");
+  // return "";
+}
+
 void *openSo(const std::string &path) {
   LOG_ASSERT(getCurrentRuntime() == DeviceRuntime::TTNN);
 
@@ -64,30 +93,21 @@ void closeSo(void *handle) {
   }
 }
 
-std::vector<std::string> getSoPrograms(void *so, const std::string &path) {
+std::vector<std::string> getSoPrograms(void *so, std::string path) {
   std::vector<std::string> functionNames;
 
   if (so == nullptr) {
     return functionNames;
   }
 
-  // Get the path of the loaded shared object
-  /*
-  Dl_info info;
-  if (dladdr(so, &info) == 0) {
-    std::cerr << "Failed to get shared object path" << std::endl;
-    return functionNames;
-  }
-  */
-  // std::string soPath =
-  //     "ttir-builder-artifacts/emitc/"
-  //     "test_reciprocal[emitc-f32-128x128]_ttnn.mlir.so"; // info.dli_fname;
   std::string command = "nm -D -C " + path + " | grep ' T ' | awk '{print $3}'";
 
   FILE *pipe = popen(command.c_str(), "r");
   if (!pipe) {
-    std::cerr << "Failed to execute nm command" << std::endl;
-    return functionNames;
+    std::cerr << "Failed to execute command to get mangled function names"
+              << std::endl;
+    throw std::runtime_error(
+        "Failed to execute command to get mangled function names");
   }
 
   char buffer[256];
@@ -124,7 +144,8 @@ std::vector<std::string> getSoPrograms(void *so, const std::string &path) {
 
 std::vector<::tt::runtime::Tensor>
 runSoProgram(void *so, const std::string &funcName,
-             std::vector<::tt::runtime::Tensor> inputs, Device device) {
+             std::vector<::tt::runtime::Tensor> inputs, Device device,
+             std::string path) {
   LOG_ASSERT(getCurrentRuntime() == DeviceRuntime::TTNN);
 
   ::ttnn::MeshDevice &ttnnMeshDevice =
@@ -153,12 +174,28 @@ runSoProgram(void *so, const std::string &funcName,
   // Convert inputs to TTNN tensors using .as method
   //
   std::vector<::ttnn::Tensor> ttnnInputs;
-  for (auto &input : inputs) {
-    LOG_ASSERT(input.matchesRuntime(DeviceRuntime::TTNN));
-    ttnnInputs.push_back(
-        ::tt::runtime::ttnn::utils::getTTNNTensorFromRuntimeTensor(input));
-  }
+  if (inputs.size() == 0) {
+    // If no inputs provided, create inputs
+    using CreateInputsFunction = std::vector<::ttnn::Tensor> (*)();
+    std::string mangledCreateInputsName =
+        getCreateInputsMangledName(funcName, path);
+    void *createInputsSymbol = dlsym(so, mangledCreateInputsName.c_str());
+    char *dlsymError = dlerror();
+    if (dlsymError) {
+      dlclose(so);
+      LOG_FATAL("Failed to load symbol: ", dlsymError);
+    }
+    auto createInputsFunc =
+        reinterpret_cast<CreateInputsFunction>(createInputsSymbol);
+    ttnnInputs = createInputsFunc();
 
+  } else {
+    for (auto &input : inputs) {
+      LOG_ASSERT(input.matchesRuntime(DeviceRuntime::TTNN));
+      ttnnInputs.push_back(
+          ::tt::runtime::ttnn::utils::getTTNNTensorFromRuntimeTensor(input));
+    }
+  }
   // Get function from the shared object.
   //
   using ForwardFunction =

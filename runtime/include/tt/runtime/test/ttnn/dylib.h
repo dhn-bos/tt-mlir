@@ -11,9 +11,10 @@ namespace tt::runtime::test::ttnn {
 
 void *openSo(const std::string &path);
 void closeSo(void *handle);
-std::vector<std::string> getSoPrograms(void *so, const std::string &path);
+std::vector<std::string> getSoPrograms(void *so, std::string path);
 std::vector<Tensor> runSoProgram(void *so, const std::string &funcName,
-                                 std::vector<Tensor> inputs, Device device);
+                                 std::vector<Tensor> inputs, Device device,
+                                 std::string path);
 bool compareOuts(std::vector<Tensor> &lhs, std::vector<Tensor> &rhs);
 } // namespace tt::runtime::test::ttnn
 

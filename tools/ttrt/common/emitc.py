@@ -188,45 +188,6 @@ class EmitC:
         self.emitc_dylibs = []
         self.ttnn_binaries = {}
         self.results = Results(self.logger, self.file_manager)
-        command_options = f"--program-index {self['--program-index']} --loops {self['--loops']} --save-artifacts "
-
-        if self["--memory"]:
-            command_options += " --memory "
-
-        if self["--disable-eth-dispatch"]:
-            command_options += " --disable-eth-dispatch "
-
-        if self["--disable-golden"]:
-            command_options += " --disable-golden "
-
-        if self["--enable-program-cache"]:
-            command_options += " --enable-program-cache "
-
-        if self["--dump-device-rate"] != 1000:
-            command_options += f" --dump-device-rate {self['--dump-device-rate']} "
-
-        if self["--benchmark"]:
-            command_options += " --benchmark "
-
-        if self["--ignore-version"]:
-            command_options += " --ignore-version "
-
-        if self["--disable-ttrt-callbacks"]:
-            command_options += " --disable-ttrt-callbacks "
-
-        ttrt_executable_path = shutil.which("ttrt")
-        test_command = f"{ttrt_executable_path} run zztemp {command_options}"
-        command_options = {
-            "binary": self["dylib"],
-            "--log-file": self["--log-file"],
-            "--artifact-dir": self["--artifact-dir"],
-            "--program-index": self["--program-index"],
-            "--loops": self["--loops"],
-            "--save-artifacts": True,
-            "--ignore-version": self["--ignore-version"],
-        }
-        print(command_options)
-        self.run_object = Run(command_options, self.logger, self.artifacts)
 
     def preprocess(self):
         self.logging.debug(f"------preprocessing emitc API")
@@ -272,7 +233,7 @@ class EmitC:
                 )
             return inputs_converted
 
-        def create_tensor(tensor):
+        def create_tensor(tensor):  # ***** check
             # Empty tensor if any of the dim is zero.
             isEmptyTensor = not all(tensor.shape)
 
@@ -307,8 +268,11 @@ class EmitC:
         # Initialize `device` to `None` for error handling in case device opening fails
         device = None
 
-        # change this: to for .dylib files in directory, for each, if there is a matching .ttnn file, run
         for dylib in self.emitc_dylibs:
+
+            # Open the dylib
+            emitc_dylib_handle = ttrt.runtime.test.open_so(dylib.file_path)
+            self.logging.debug(f"opened emitc dylib={dylib.file_path}")
             try:
                 compare_to_ttnn = False
                 if dylib in self.ttnn_binaries:
@@ -351,44 +315,66 @@ class EmitC:
                     self.logging.info(
                         f"test command for binary={bin.file_path} is: {test_command}"
                     )
-                    # testProcess = subprocess.Popen(
-                    #    [test_command],
-                    #    shell=True,
-                    #    preexec_fn=os.setsid,
-                    # )
-                    self.run_object()
+                    testProcess = subprocess.Popen(
+                        [test_command],
+                        shell=True,
+                        preexec_fn=os.setsid,
+                    )
 
-                # Open a device of shape (x,y), where (x,y) is the mesh shape supplied by the flatbuffer
-                device = ttrt.runtime.open_mesh_device(self.run_object.mesh_options)
+                    def signal_handler(sig, frame):
+                        os.killpg(os.getpgid(testProcess.pid), signal.SIGTERM)
+                        sys.exit(3)
 
-                # Open the dylib
-                emitc_dylib_handle = ttrt.runtime.test.open_so(dylib.file_path)
-                self.logging.debug(f"opened emitc dylib={dylib.file_path}")
+                    signal.signal(signal.SIGINT, signal_handler)
+                    signal.signal(signal.SIGTERM, signal_handler)
+                    testProcess.communicate()
+
+                # Open a device of default shape
+                dispatch_core_type = ttrt.runtime.DispatchCoreType.ETH
+
+                if self["--disable-eth-dispatch"]:
+                    dispatch_core_type = ttrt.runtime.DispatchCoreType.WORKER
+                mesh_options = ttrt.runtime.MeshDeviceOptions()
+                mesh_options.dispatch_core_type = dispatch_core_type
+                mesh_options.enable_program_cache = self["--enable-program-cache"]
+                mesh_options.trace_region_size = self["--trace-region-size"]
+
+                if compare_to_ttnn:
+                    # Open a device of shape (x,y), where (x,y) is the mesh shape supplied by the flatbuffer
+                    # device = ttrt.runtime.open_mesh_device(self.run.mesh_options)
+                    fb_mesh_shape = bin.get_program(0).mesh_shape
+                    mesh_options.mesh_shape = fb_mesh_shape
+
+                device = ttrt.runtime.open_mesh_device(mesh_options)
 
                 # Run to EmitC
                 program_names = ttrt.runtime.test.get_so_programs(
                     emitc_dylib_handle, dylib.file_path
                 )
 
-                fbb_input_tensors = self.load_tensors_from_artifacts(bin, "input")
-                fbb_output_tensors = self.load_tensors_from_artifacts(
-                    bin, "device_output"
-                )
+                if compare_to_ttnn:
+                    # Load input and output tensors from artifacts
+                    fbb_input_tensors = self.load_tensors_from_artifacts(bin, "input")
+                    fbb_output_tensors = self.load_tensors_from_artifacts(
+                        bin, "device_output"
+                    )
+                else:
+                    inputs = []
 
                 for program_index in range(len(program_names)):
-                    program_name = "program_" + str(
-                        program_index
-                    )  # program_names[program_index]
-                    runtime_inputs = []
-                    for i in fbb_input_tensors[program_name]:
-                        new_input = create_tensor(i)
-                        runtime_inputs.append(new_input)
+                    if compare_to_ttnn:
+                        runtime_inputs = []
+                        for i in fbb_input_tensors["program_" + str(program_index)]:
+                            new_input = create_tensor(i)
+                            runtime_inputs.append(new_input)
 
-                    # pre-upload inputs
-                    # ***** Will have to figure out layout conversion here *****
-                    inputs = convert_input_layouts(
-                        device, runtime_inputs, bin.fbb, program_index
-                    )
+                        # pre-upload inputs
+                        inputs = convert_input_layouts(
+                            device,
+                            runtime_inputs,
+                            bin.fbb,
+                            program_index,
+                        )
 
                     for loop in range(self["--loops"]):
                         emitc_outs = ttrt.runtime.test.run_so_program(
@@ -396,11 +382,12 @@ class EmitC:
                             program_names[program_index],
                             inputs,
                             device,
+                            dylib.file_path,
                         )
 
                     if compare_to_ttnn:
                         runtime_outputs = []
-                        for i in fbb_output_tensors[program_name]:  # *******
+                        for i in fbb_output_tensors["program_" + str(program_index)]:
                             new_output = create_tensor(i)
                             runtime_outputs.append(new_output)
 
@@ -450,7 +437,7 @@ class EmitC:
                     ttrt.runtime.close_mesh_device(device)
                     device = None
 
-                # ttrt.runtime.test.close_so(emitc_dylib_handle)
+                ttrt.runtime.test.close_so(emitc_dylib_handle)
 
         self.logging.debug(f"finished executing emitc_dylibs")
 

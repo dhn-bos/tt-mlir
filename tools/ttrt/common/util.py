@@ -1050,10 +1050,7 @@ class EmitCDylib:
         self.logger = logger
         self.logging = self.logger.get_logger()
         self.file_manager = file_manager
-        self.file_path = (
-            file_path if file_path != None else "<binary-from-capsule>"
-        )  # ******
-        # self.name = self.file_manager.get_file_name(file_path)
+        self.file_path = file_path if file_path != None else "<dylib-from-capsule>"
 
         # temporary state value to check if test failed
         self.test_result = "pass"
