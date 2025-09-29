@@ -543,7 +543,10 @@ class FileManager:
 
         if self.is_file(path):
             if self.check_file_exists(path):
-                if self.get_file_extension(path) == EmitCDylib.get_so_file_extension():
+                if (
+                    self.get_file_extension(path)
+                    == Flatbuffer.get_ttsys_file_extension()
+                ):
                     ttsys_files.append(path)
                     self.logging.debug(f"found file={path}")
             else:
@@ -555,7 +558,7 @@ class FileManager:
                     for file in files:
                         if (
                             self.get_file_extension(file)
-                            == EmitCDylib.get_so_file_extension()
+                            == Flatbuffer.get_ttsys_file_extension()
                         ):
                             ttsys_files.append(os.path.join(root, file))
                             self.logging.debug(f"found file={os.path.join(root, file)}")

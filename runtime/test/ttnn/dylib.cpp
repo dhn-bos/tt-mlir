@@ -10,10 +10,7 @@
 #include "tt/runtime/types.h"
 #include "tt/runtime/utils.h"
 
-#include <cstdlib>
 #include <dlfcn.h>
-#include <fstream>
-#include <sstream>
 
 namespace tt::runtime::test::ttnn {
 
@@ -64,7 +61,6 @@ static std::string getCreateInputsMangledName(std::string_view funcName,
     }
   }
   throw std::runtime_error("Failed to find mangled function name");
-  // return "";
 }
 
 void *openSo(const std::string &path) {
@@ -196,6 +192,7 @@ runSoProgram(void *so, const std::string &funcName,
           ::tt::runtime::ttnn::utils::getTTNNTensorFromRuntimeTensor(input));
     }
   }
+
   // Get function from the shared object.
   //
   using ForwardFunction =

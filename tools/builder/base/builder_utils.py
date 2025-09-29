@@ -414,6 +414,8 @@ def compile_ttir_to_flatbuffer(
             output_root, "ttir-builder-artifacts", test_base + "_ttnn.mlir.ttnn", "ttnn"
         )
         dst_dir = os.path.join(output_root, "ttir-builder-artifacts", "emitc")
+        if not os.path.exists(dst_dir):
+            os.makedirs(dst_dir)
         shutil.copy2(src_file, dst_dir)
 
     # Compile model to TTIR MLIR
@@ -932,8 +934,6 @@ def compile_ttir_module_to_flatbuffer(
 
     # Generate a .so flatbuffer file from the .cpp file
     if target == "emitc":
-        # Temporary print for debugging CI, will be removed later
-        print(os.environ["TT_METAL_HOME"])
         # Set TT_METAL_HOME for the subprocess call, temporary until builder is decoupled from ttrt
         if "ttrt" in os.environ["TT_METAL_HOME"]:
             tt_metal_home = os.path.abspath(
@@ -943,7 +943,6 @@ def compile_ttir_module_to_flatbuffer(
                 )
             )
             os.environ["TT_METAL_HOME"] = tt_metal_home
-            print(os.environ["TT_METAL_HOME"])
 
         subprocess.run(
             [
