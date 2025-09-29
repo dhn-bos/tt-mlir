@@ -188,7 +188,7 @@ jobs:
           {runs-on: n150,         sh-run: true,  name: "run",  suite: "run",            image: "speedy", type: "ttrt",            path: "Silicon",                     flags: "--non-zero"},
           {runs-on: n150,         sh-run: false, name: "perf", suite: "perf",           image: "tracy",  type: "ttrt",            path: "Silicon/TTNN/n150/perf"},
           {runs-on: n150,         sh-run: false, name: "perf", suite: "optimizer",      image: "tracy",  type: "ttrt",            path: "Silicon/TTNN/n150/optimizer"},
-          {runs-on: n150,         sh-run: true,  name: "run",  suite: "emitc",          image: "tracy",  type: "ttrt",            path: "EmitC",                       flags: "--emitc"},
+          {runs-on: n150,         sh-run: true,  name: "emitc",  suite: "emitc",          image: "tracy",  type: "ttrt",            path: "EmitC"},
           {runs-on: n150,         sh-run: true,  name: "run",  suite: "op_model",       image: "speedy", type: "ttrt",            path: "Silicon/TTNN/n150/optimizer", flags: "--non-zero"},
           {runs-on: n150,         sh-run: true,  name: "run",  suite: "runtime_debug",  image: "tracy",  type: "ttrt",            path: "Silicon",                     flags: "--non-zero"},
           {runs-on: n300,         sh-run: true,  name: "run",  suite: "run",            image: "speedy", type: "ttrt",            path: "Silicon",                     flags: "--non-zero"},
@@ -358,6 +358,9 @@ jobs:
       shell: bash
       run: |
         source env/activate
+        export LD_LIBRARY_PATH="${{ steps.strings.outputs.install-output-dir }}/lib:${TTMLIR_TOOLCHAIN_DIR}/lib:${LD_LIBRARY_PATH}"
+        export SYSTEM_DESC_PATH="${GITHUB_WORKSPACE}/ttrt-artifacts/system_desc.ttsys"
+        ln -sf ${{ steps.strings.outputs.install-output-dir }} ${{ steps.strings.outputs.build-output-dir }}
         pytest ${{ matrix.build.path }} ${{ matrix.build.flags }} -v --junit-xml=${{ steps.strings.outputs.test_report_path }}
         if [[ "${{ matrix.build.run-ttrt }}" == "true" ]]; then
           ttrt run ${{ matrix.build.ttrt-flags }} ttir-builder-artifacts/
