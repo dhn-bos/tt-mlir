@@ -390,7 +390,7 @@ def compile_ttir_to_flatbuffer(
         if len(inputs_shapes) != len(inputs_types):
             raise ValueError("inputs_shapes and inputs_types must have the same length")
 
-    if target == "emitc":
+    if target == "emitc" or target == "emitpy":
         # Compile a ttnn flatbuffer for EmitC comparison
         compile_ttir_to_flatbuffer(
             fn=fn,
@@ -413,7 +413,7 @@ def compile_ttir_to_flatbuffer(
         src_file = _get_target_path(
             output_root, "ttir-builder-artifacts", test_base + "_ttnn.mlir.ttnn", "ttnn"
         )
-        dst_dir = os.path.join(output_root, "ttir-builder-artifacts", "emitc")
+        dst_dir = os.path.join(output_root, "ttir-builder-artifacts", target)
         if not os.path.exists(dst_dir):
             os.makedirs(dst_dir)
         shutil.copy2(src_file, dst_dir)
