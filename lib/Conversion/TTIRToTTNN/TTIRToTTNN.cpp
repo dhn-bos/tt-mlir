@@ -574,6 +574,25 @@ public:
 } // namespace
 
 namespace {
+class PagedUpdateCacheOpConversionPattern
+    : public OpConversionPattern<ttir::PagedUpdateCacheOp> {
+public:
+  using OpConversionPattern<ttir::PagedUpdateCacheOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ttir::PagedUpdateCacheOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<ttnn::PagedUpdateCacheOp>(
+        op, this->getTypeConverter()->convertType(op.getType()),
+        adaptor.getCache(), adaptor.getInput(), adaptor.getUpdateIndex(),
+        adaptor.getShareCache(), adaptor.getPageTable(),
+        adaptor.getBatchOffset());
+    return success();
+  }
+};
+} // namespace
+
+namespace {
 class FillCacheOpConversionPattern
     : public OpConversionPattern<ttir::FillCacheOp> {
 public:
@@ -2008,6 +2027,7 @@ void populateTTIRToTTNNPatterns(MLIRContext *ctx, RewritePatternSet &patterns,
            ArangeOpConversionPattern,
            RandOpConversionPattern,
            UpdateCacheOpConversionPattern,
+           PagedUpdateCacheOpConversionPattern,
            FillCacheOpConversionPattern,
            ScatterOpConversionPattern,
            PermuteOpConversionPattern,
