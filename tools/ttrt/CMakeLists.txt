@@ -55,6 +55,7 @@ declare_mlir_python_sources(TTRTSources
     common/read.py
     common/run.py
     common/util.py
+    common/emitc.py
 
     # runtime subpackage files
     runtime/__init__.py

@@ -188,7 +188,7 @@ jobs:
           {runs-on: n150,         sh-run: true,  name: "run",  suite: "run",            image: "speedy", type: "ttrt",            path: "Silicon",                     flags: "--non-zero"},
           {runs-on: n150,         sh-run: false, name: "perf", suite: "perf",           image: "tracy",  type: "ttrt",            path: "Silicon/TTNN/n150/perf"},
           {runs-on: n150,         sh-run: false, name: "perf", suite: "optimizer",      image: "tracy",  type: "ttrt",            path: "Silicon/TTNN/n150/optimizer"},
-          {runs-on: n150,         sh-run: true,  name: "run",  suite: "emitc",          image: "tracy",  type: "ttrt",            path: "EmitC",                       flags: "--emitc"},
+          {runs-on: n150,         sh-run: true,  name: "emitc",  suite: "emitc",          image: "tracy",  type: "ttrt",            path: "EmitC"},
           {runs-on: n150,         sh-run: true,  name: "run",  suite: "op_model",       image: "speedy", type: "ttrt",            path: "Silicon/TTNN/n150/optimizer", flags: "--non-zero"},
           {runs-on: n150,         sh-run: true,  name: "run",  suite: "runtime_debug",  image: "tracy",  type: "ttrt",            path: "Silicon",                     flags: "--non-zero"},
           {runs-on: n300,         sh-run: true,  name: "run",  suite: "run",            image: "speedy", type: "ttrt",            path: "Silicon",                     flags: "--non-zero"},
@@ -358,10 +358,21 @@ jobs:
       shell: bash
       run: |
         source env/activate
+        export TT_METAL_HOME="${{ steps.strings.outputs.install-output-dir }}/tt-metal"
+        export TT_METAL_LIB="${{ steps.strings.outputs.install-output-dir }}/lib"
+        export LD_LIBRARY_PATH="${{ steps.strings.outputs.install-output-dir }}/lib:${TTMLIR_TOOLCHAIN_DIR}/lib:${LD_LIBRARY_PATH}"
         pytest ${{ matrix.build.path }} ${{ matrix.build.flags }} -v --junit-xml=${{ steps.strings.outputs.test_report_path }}
         if [[ "${{ matrix.build.run-ttrt }}" == "true" ]]; then
           ttrt run ${{ matrix.build.ttrt-flags }} ttir-builder-artifacts/
           ttrt run ${{ matrix.build.ttrt-flags }} stablehlo-builder-artifacts/
+          if [ -d ttir-builder-artifacts/emitc ]; then
+            python3 tools/ttnn-standalone/ci_compile_dylib.py --dir ttir-builder-artifacts/emitc
+            ttrt emitc ${{ matrix.build.ttrt-flags }} ttir-builder-artifacts/emitc/
+          fi
+          if [ -d stablehlo-builder-artifacts/emitc ]; then
+            python3 tools/ttnn-standalone/ci_compile_dylib.py --dir stablehlo-builder-artifacts/emitc
+            ttrt emitc ${{ matrix.build.ttrt-flags }} stablehlo-builder-artifacts/emitc/
+          fi
         fi
 
 
