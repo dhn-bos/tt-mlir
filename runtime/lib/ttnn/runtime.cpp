@@ -1035,8 +1035,8 @@ getOpOutputRef(OpContext opContextHandle,
     tensorRef = opContext.type_as_EltwiseBinaryCompositeOp()->out();
     break;
   }
-  case ::tt::target::ttnn::OpType::EltwiseBinaryCompositeParamsOp: {
-    tensorRef = opContext.type_as_EltwiseBinaryCompositeParamsOp()->out();
+  case ::tt::target::ttnn::OpType::EltwiseBinaryCompositeScalarOp: {
+    tensorRef = opContext.type_as_EltwiseBinaryCompositeScalarOp()->out();
     break;
   }
   case ::tt::target::ttnn::OpType::EltwiseTernaryWhereOp: {
@@ -1327,8 +1327,8 @@ getOpInputRefs(OpContext opContextHandle,
                   opContext.type_as_EltwiseBinaryCompositeOp()->rhs()};
     break;
   }
-  case ::tt::target::ttnn::OpType::EltwiseBinaryCompositeParamsOp: {
-    tensorRefs = {opContext.type_as_EltwiseBinaryCompositeParamsOp()->lhs()};
+  case ::tt::target::ttnn::OpType::EltwiseBinaryCompositeScalarOp: {
+    tensorRefs = {opContext.type_as_EltwiseBinaryCompositeScalarOp()->lhs()};
     break;
   }
   case ::tt::target::ttnn::OpType::EltwiseTernaryWhereOp: {
