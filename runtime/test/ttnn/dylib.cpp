@@ -138,11 +138,11 @@ std::vector<std::string> getSoPrograms(void *so, std::string path) {
   return cleanedNames;
 }
 
-std::vector<::tt::runtime::Tensor>
-runSoProgram(void *so, const std::string &funcName,
-             std::vector<::tt::runtime::Tensor> inputs, Device device,
-             std::string path) {
-  LOG_ASSERT(getCurrentRuntime() == DeviceRuntime::TTNN);
+std::vector<::tt::runtime::Tensor> createInputs(void *so,
+                                                const std::string &funcName,
+                                                Device device,
+                                                std::string path) {
+  LOG_ASSERT(getCurrentDeviceRuntime() == DeviceRuntime::TTNN);
 
   ::ttnn::MeshDevice &ttnnMeshDevice =
       device.as<::ttnn::MeshDevice>(DeviceRuntime::TTNN);
@@ -170,27 +170,64 @@ runSoProgram(void *so, const std::string &funcName,
   // Convert inputs to TTNN tensors using .as method
   //
   std::vector<::ttnn::Tensor> ttnnInputs;
-  if (inputs.size() == 0) {
-    // If no inputs provided, create inputs
-    using CreateInputsFunction = std::vector<::ttnn::Tensor> (*)();
-    std::string mangledCreateInputsName =
-        getCreateInputsMangledName(funcName, path);
-    void *createInputsSymbol = dlsym(so, mangledCreateInputsName.c_str());
-    char *dlsymError = dlerror();
-    if (dlsymError) {
-      dlclose(so);
-      LOG_FATAL("Failed to load symbol: ", dlsymError);
-    }
-    auto createInputsFunc =
-        reinterpret_cast<CreateInputsFunction>(createInputsSymbol);
-    ttnnInputs = createInputsFunc();
+  using CreateInputsFunction = std::vector<::ttnn::Tensor> (*)();
+  std::string mangledCreateInputsName =
+      getCreateInputsMangledName(funcName, path);
+  void *createInputsSymbol = dlsym(so, mangledCreateInputsName.c_str());
+  char *dlsymError = dlerror();
+  if (dlsymError) {
+    dlclose(so);
+    LOG_FATAL("Failed to load symbol: ", dlsymError);
+  }
+  auto createInputsFunc =
+      reinterpret_cast<CreateInputsFunction>(createInputsSymbol);
+  ttnnInputs = createInputsFunc();
 
-  } else {
-    for (auto &input : inputs) {
-      LOG_ASSERT(input.matchesRuntime(DeviceRuntime::TTNN));
-      ttnnInputs.push_back(
-          ::tt::runtime::ttnn::utils::getTTNNTensorFromRuntimeTensor(input));
-    }
+  // Convert TTNN Tensors to Runtime Tensors before returning
+  std::vector<::tt::runtime::Tensor> runtimeInputs;
+  for (::ttnn::Tensor &input : ttnnInputs) {
+    runtimeInputs.push_back(
+        ::tt::runtime::ttnn::utils::createRuntimeTensorFromTTNN(input));
+  }
+
+  return runtimeInputs;
+}
+
+std::vector<::tt::runtime::Tensor>
+runSoProgram(void *so, const std::string &funcName,
+             std::vector<::tt::runtime::Tensor> inputs, Device device) {
+  LOG_ASSERT(getCurrentDeviceRuntime() == DeviceRuntime::TTNN);
+
+  ::ttnn::MeshDevice &ttnnMeshDevice =
+      device.as<::ttnn::MeshDevice>(DeviceRuntime::TTNN);
+
+  // In this path, we only ever test with a single device (for now) in CI, but
+  // locally we may have 2 devices.
+  assert(ttnnMeshDevice.get_devices().size() > 0);
+
+  // Clear any previous errors.
+  //
+  dlerror();
+
+  // Call setDevice function from dylib.
+  //
+  void *setDeviceSymbol = dlsym(so, "setDevice");
+  const char *setDeviceError = dlerror();
+  if (setDeviceError) {
+    dlclose(so);
+    LOG_FATAL("Failed to find setDevice function in dylib.");
+  }
+  using SetDeviceFunction = void (*)(::ttnn::MeshDevice *);
+  auto setDeviceFunc = reinterpret_cast<SetDeviceFunction>(setDeviceSymbol);
+  setDeviceFunc(&ttnnMeshDevice);
+
+  // Convert inputs to TTNN tensors using .as method
+  //
+  std::vector<::ttnn::Tensor> ttnnInputs;
+  for (auto &input : inputs) {
+    LOG_ASSERT(input.matchesRuntime(DeviceRuntime::TTNN));
+    ttnnInputs.push_back(
+        ::tt::runtime::ttnn::utils::getTTNNTensorFromRuntimeTensor(input));
   }
 
   // Get function from the shared object.

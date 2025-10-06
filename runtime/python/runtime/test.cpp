@@ -30,9 +30,12 @@ void registerRuntimeTestBindings(nb::module_ &m) {
   m.def("get_so_programs", &tt::runtime::test::ttnn::getSoPrograms,
         nb::arg("so"), nb::arg("path"),
         "Get the program names from a shared object file");
+  m.def("create_inputs", &tt::runtime::test::ttnn::createInputs, nb::arg("so"),
+        nb::arg("func_name"), nb::arg("device"), nb::arg("path"),
+        "Create inputs for a program from a shared object file");
   m.def("run_so_program", &tt::runtime::test::ttnn::runSoProgram, nb::arg("so"),
         nb::arg("func_name"), nb::arg("inputs"), nb::arg("device"),
-        nb::arg("path"), "Run a program from a shared object file");
+        "Run a program from a shared object file");
   m.def("compare_outs", &tt::runtime::test::ttnn::compareOuts, nb::arg("lhs"),
         nb::arg("rhs"));
 }

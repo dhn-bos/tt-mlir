@@ -67,16 +67,9 @@ class EmitC:
             help="number of loops",
         )
         EmitC.register_arg(
-            name="--host-only",
-            type=bool,
-            default=False,
-            choices=[True, False],
-            help="collect performance trace on host only",
-        )
-        EmitC.register_arg(
             name="--result-file",
             type=str,
-            default="emitc_results.json",
+            default="EmitC_results.json",
             choices=None,
             help="test file to save results to",
         )
@@ -86,6 +79,13 @@ class EmitC:
             default=False,
             choices=[True, False],
             help="disable golden comparison for intermediate and output tensors",
+        )
+        EmitC.register_arg(
+            name="--disable-flatbuffer-comparison",
+            type=bool,
+            default=False,
+            choices=[True, False],
+            help="disable flatbuffer run and comparison",
         )
         EmitC.register_arg(
             name="--memory",
@@ -114,13 +114,6 @@ class EmitC:
             default=False,
             choices=[True, False],
             help="enable program cache in ttnn runtime",
-        )
-        EmitC.register_arg(
-            name="--emitc",
-            type=bool,
-            default=False,
-            choices=[True, False],
-            help="toggles EmitC testing",
         )
         EmitC.register_arg(
             name="--trace-region-size",
@@ -157,6 +150,20 @@ class EmitC:
             choices=[True, False],
             help="disable ttrt callbacks",
         )
+        EmitC.register_arg(
+            name="--print-input-output-tensors",
+            type=bool,
+            default=False,
+            choices=[True, False],
+            help="print input and output tensors",
+        )
+        EmitC.register_arg(
+            name="--save-artifacts",
+            type=bool,
+            default=False,
+            choices=[True, False],
+            help="save all artifacts during run",
+        )
 
     def __init__(self, args={}, logger=None, artifacts=None):
         for name, attributes in EmitC.registered_args.items():
@@ -166,7 +173,6 @@ class EmitC:
                 else:
                     self[name] = attributes["default"]
             else:
-                # argument got parsed to hyphen's for underscrolls and leading hyphen's removed - need to put back
                 converted_name = name
                 if name != "dylib":
                     converted_name = converted_name.lstrip("-")
@@ -195,7 +201,8 @@ class EmitC:
         if self["--clean-artifacts"]:
             self.artifacts.clean_artifacts()
 
-        self.artifacts.create_artifacts()
+        if self["--save-artifacts"]:
+            self.artifacts.create_artifacts()
 
         self.logging.debug(f"------finished preprocessing emitc API")
 
@@ -212,8 +219,17 @@ class EmitC:
             corresponding_ttnn_path = self.file_manager.find_so_corresponding_ttnn(path)
 
             if corresponding_ttnn_path:
+                self.logging.debug(
+                    f"Found ttnn file corresponding to .so dylib ={corresponding_ttnn_path}"
+                )
                 bin = Binary(self.logger, self.file_manager, corresponding_ttnn_path)
-                self.ttnn_binaries[dylib] = bin
+                try:
+                    self.ttnn_binaries[dylib] = bin
+                except Exception as e:
+                    self.logging.warning(
+                        f"SKIP: dylib comparison for test={path} was skipped with exception={str(e)}"
+                    )
+                    continue
 
         self.logging.debug(f"------finished checking constraints for emitc API")
 
@@ -256,8 +272,6 @@ class EmitC:
 
         self.logging.debug(f"------executing emitc API")
 
-        self.logging.debug(f"executing emitc_dylibs")
-
         if len(self.emitc_dylibs) == 0:
             self.logging.warning(f"no EmitC dylibs found to run - returning early")
             return
@@ -269,7 +283,6 @@ class EmitC:
         device = None
 
         for dylib in self.emitc_dylibs:
-
             # Open the dylib
             emitc_dylib_handle = ttrt.runtime.test.open_so(dylib.file_path)
             self.logging.debug(f"opened emitc dylib={dylib.file_path}")
@@ -279,8 +292,13 @@ class EmitC:
                     bin = self.ttnn_binaries[dylib]
                     compare_to_ttnn = True
 
-                if compare_to_ttnn:
                     command_options = f"--program-index {self['--program-index']} --loops {self['--loops']} --save-artifacts "
+
+                    if self["--artifact-dir"]:
+                        command_options += f" --artifact-dir {self['--artifact-dir']} "
+
+                    if self["--result-file"]:
+                        command_options += f" --result-file {self['--result-file']} "
 
                     if self["--memory"]:
                         command_options += " --memory "
@@ -293,6 +311,9 @@ class EmitC:
 
                     if self["--enable-program-cache"]:
                         command_options += " --enable-program-cache "
+
+                    if self["--trace-region-size"]:
+                        command_options += " --trace-region-size "
 
                     if self["--dump-device-rate"] != 1000:
                         command_options += (
@@ -307,6 +328,9 @@ class EmitC:
 
                     if self["--disable-ttrt-callbacks"]:
                         command_options += " --disable-ttrt-callbacks "
+
+                    if self["--print-input-output-tensors"]:
+                        command_options += " --print-input-output-tensors "
 
                     ttrt_executable_path = shutil.which("ttrt")
                     test_command = (
@@ -341,7 +365,6 @@ class EmitC:
 
                 if compare_to_ttnn:
                     # Open a device of shape (x,y), where (x,y) is the mesh shape supplied by the flatbuffer
-                    # device = ttrt.runtime.open_mesh_device(self.run.mesh_options)
                     fb_mesh_shape = bin.get_program(0).mesh_shape
                     mesh_options.mesh_shape = fb_mesh_shape
 
@@ -352,16 +375,31 @@ class EmitC:
                     emitc_dylib_handle, dylib.file_path
                 )
 
+                self.logging.debug(f"Program names found: {program_names}")
+
+                if self["--program-index"] != "all":
+                    if len(program_names) > int(self["--program-index"]):
+                        self.logging.warning(
+                            f"program index={int(self['--program-index'])} is greater than number of programs in: {bin.file_path} - skipping this test"
+                        )
+                        return
+
                 if compare_to_ttnn:
                     # Load input and output tensors from artifacts
                     fbb_input_tensors = self.load_tensors_from_artifacts(bin, "input")
                     fbb_output_tensors = self.load_tensors_from_artifacts(
                         bin, "device_output"
                     )
-                else:
-                    inputs = []
 
                 for program_index in range(len(program_names)):
+                    if self["--program-index"] != "all" and program_index != int(
+                        self["--program-index"]
+                    ):
+                        continue
+                    self.logging.debug(
+                        f"evaluating program={program_names[program_index]} for python file={dylib.file_path}"
+                    )
+
                     if compare_to_ttnn:
                         runtime_inputs = []
                         for i in fbb_input_tensors["program_" + str(program_index)]:
@@ -375,15 +413,51 @@ class EmitC:
                             bin.fbb,
                             program_index,
                         )
+                    else:
+                        inputs = ttrt.runtime.test.create_inputs(
+                            emitc_dylib_handle,
+                            program_names[program_index],
+                            device,
+                            dylib.file_path,
+                        )
+
+                    if self["--save-artifacts"]:
+                        program_folder = f"{self.artifacts.get_dylib_emitc_folder_path(dylib)}/program_{program_index}"
+                        for i, input_tensor in enumerate(inputs):
+                            # input_tensor = ttnn.from_device(input_tensor)
+                            torch_input = input_tensor.to_torch()
+
+                            self.artifacts.save_torch_tensor(
+                                program_folder,
+                                torch_input,
+                                f"emitpy_input_{i}.pt",
+                            )
+
+                    if self["--print-input-output-tensors"]:
+                        for i, input_tensor in enumerate(inputs):
+                            self.logging.info(f"Input tensor {i}: {torch_input}")
 
                     for loop in range(self["--loops"]):
-                        emitc_outs = ttrt.runtime.test.run_so_program(
+                        emitc_outputs = ttrt.runtime.test.run_so_program(
                             emitc_dylib_handle,
                             program_names[program_index],
                             inputs,
                             device,
-                            dylib.file_path,
                         )
+
+                    # run.py line 875 has logic that could be useful here for saving inputs/outputs
+
+                    if self["--save-artifacts"]:
+                        for i, output in enumerate(dylib_outputs):
+                            self.artifacts.save_torch_tensor(
+                                program_folder,
+                                torch_output,
+                                f"emitpy_output_{i}.pt",
+                            )
+
+                    if self["--print-input-output-tensors"]:
+                        for i, output_tensor in enumerate(dylib_outputs):
+                            self.logging.info(f"Output tensor {i}: {torch_output}")
 
                     if compare_to_ttnn:
                         runtime_outputs = []
@@ -391,23 +465,23 @@ class EmitC:
                             new_output = create_tensor(i)
                             runtime_outputs.append(new_output)
 
-                        emitc_outs = [
+                        emitc_outputs = [
                             ttrt.runtime.to_host(emitc_out, untilize=True)[0]
-                            for emitc_out in emitc_outs
+                            for emitc_out in emitc_outputs
                         ]
                         self.logging.debug(
                             f"got emitc outputs for program_index={program_index}, loop={loop}"
                         )
 
                         all_tensors_match = ttrt.runtime.test.compare_outs(
-                            runtime_outputs, emitc_outs
+                            runtime_outputs, emitc_outputs
                         )
 
                         if not all_tensors_match:
                             self.logging.error(
                                 "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
                             )
-                            self.logging.error(fbb_output_tensors, emitc_outs)
+                            self.logging.error(fbb_output_tensors, emitc_outputs)
                             raise Exception(
                                 "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
                             )
@@ -455,7 +529,6 @@ class EmitC:
                     "log_file": self.logger.file_name,
                     "artifacts": self.artifacts.artifacts_folder_path,
                     "program_index": self["--program-index"],
-                    # "program_results": dylib.program_results,
                 }
                 self.results.add_result(test_result)
                 self.logging.info(f"PASS: test case={dylib.file_path}")
