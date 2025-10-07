@@ -2768,6 +2768,8 @@ public:
 };
 } // namespace
 
+// SplitQueryKeyValueAndSplitHeadsOp conversion pattern
+//
 namespace {
 class SplitQueryKeyValueAndSplitHeadsOpConversionPattern
     : public TTNNToEmitCBaseOpConversionPattern<
@@ -2794,14 +2796,25 @@ public:
         mlir::tt::ttnn::SplitQueryKeyValueAndSplitHeadsOp>
         emitter(srcOp, adaptor, rewriter);
 
+    // Prepare optional kv_input_tensor
+    auto kvInput = (srcOp->getNumOperands() > 1)
+                       ? emitter.emit(srcOp->getOperand(1))
+                       : emitter.emit(std::nullopt);
+
+    // Prepare optional num_kv_heads
+    auto numKvHeadsOpt = srcOp.getNumKvHeads();
+    auto numKvHeads = numKvHeadsOpt.has_value()
+                          ? emitter.emit(numKvHeadsOpt.value())
+                          : emitter.emit(std::nullopt);
+
     llvm::SmallVector<mlir::Attribute> args{
         emitter.emit(srcOp.getInputTensor()),
-        nullptr,
-        nullptr,
-        nullptr,
-        nullptr,
-        nullptr,
-        nullptr,
+        kvInput,
+        emitter.emit(srcOp.getNumHeads()),
+        numKvHeads,
+        emitter.emit(srcOp.getTransposeKey()),
+        emitter.emit(srcOp.getMemoryConfig()) |
+            emitter.getMemoryConfig(srcOp.getResult(0)),
     };
 
     emitter.replaceOp(*this, args);
@@ -3483,6 +3496,8 @@ void populateTTNNToEmitCPatterns(mlir::MLIRContext *ctx,
   // Transformers ops
   //
   patterns.add<ConcatenateHeadsOpConversionPattern>(typeConverter, ctx);
+  patterns.add<SplitQueryKeyValueAndSplitHeadsOpConversionPattern>(
+      typeConverter, ctx);
   patterns.add<RotaryEmbeddingLlamaOpConversionPattern>(typeConverter, ctx);
   patterns.add<NLPConcatHeadsDecodeOpConversionPattern>(typeConverter, ctx);
   patterns.add<ScaledDotProductAttentionDecodeOpConversionPattern>(
