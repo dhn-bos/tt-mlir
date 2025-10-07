@@ -15,7 +15,7 @@ from builder.base.builder_utils import compile_ttir_to_flatbuffer
 pytestmark = pytest.mark.frontend("ttir")
 
 
-@pytest.mark.fails_golden
+@pytest.mark.xfail(reason="fails golden")
 @pytest.mark.parametrize("m", [2])
 @pytest.mark.parametrize("k", [4])
 @pytest.mark.parametrize("n", [4])
@@ -58,7 +58,7 @@ def test_matmul_single_core_8otpc(m: int, k: int, n: int, target: str, request, 
     )
 
 
-@pytest.mark.fails_golden
+@pytest.mark.xfail(reason="fails golden")
 @pytest.mark.parametrize("m", [3, 6, 9])
 @pytest.mark.parametrize("k", [4])
 @pytest.mark.parametrize("n", [3, 6])
@@ -100,7 +100,7 @@ def test_matmul_multi_core_8otpc(m: int, k: int, n: int, target: str, request, d
     )
 
 
-@pytest.mark.fails_golden
+@pytest.mark.xfail(reason="fails golden")
 @pytest.mark.parametrize(
     "shape",
     [
@@ -159,7 +159,7 @@ def test_matmul_ttnn_shapes_single_buffered(
     )
 
 
-@pytest.mark.fails_golden
+@pytest.mark.xfail(reason="fails golden")
 @pytest.mark.parametrize(
     "shape",
     [
