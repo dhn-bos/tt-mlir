@@ -25,6 +25,8 @@ if [[ "$runttrt" == "1" ]]; then
     cp run_results.json ${TTRT_REPORT_PATH%_*}_ttir_${TTRT_REPORT_PATH##*_} || true
     ttrt run $TTRT_ARGS stablehlo-builder-artifacts/
     cp run_results.json ${TTRT_REPORT_PATH%_*}_stablehlo_${TTRT_REPORT_PATH##*_} || true
+    which ttrt
+    pip show ttrt
     echo $PYTHONPATH
     export PYTHONPATH="$TTMLIR_TOOLCHAIN_DIR/venv/lib/python3.11/site-packages/ttrt/runtime/ttnn:$PYTHONPATH"
     echo $PYTHONPATH
