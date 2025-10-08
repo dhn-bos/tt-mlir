@@ -10,7 +10,7 @@ from ttmlir.ir import *
 
 from builder.base.builder import Operand
 from builder.ttir.ttir_builder import TTIRBuilder
-from builder.base.builder_utils import compile_ttir_to_flatbuffer
+from builder.base.builder_utils import compile_and_execute_ttir
 
 pytestmark = pytest.mark.frontend("ttir")
 
@@ -45,7 +45,7 @@ def test_matmul_single_core_8otpc(m: int, k: int, n: int, target: str, request, 
         f"num-stream-buffers=1",
     ]
 
-    compile_ttir_to_flatbuffer(
+    compile_and_execute_ttir(
         matmul,
         [lhs, rhs],
         target=target,
@@ -87,7 +87,7 @@ def test_matmul_multi_core_8otpc(m: int, k: int, n: int, target: str, request, d
         f"num-stream-buffers=1",
     ]
 
-    compile_ttir_to_flatbuffer(
+    compile_and_execute_ttir(
         matmul,
         [lhs, rhs],
         target=target,
@@ -145,7 +145,7 @@ def test_matmul_ttnn_shapes_single_buffered(
         f"num-stream-buffers=1",
         f"use-tile-matmul={use_tile_matmul}",
     ]
-    compile_ttir_to_flatbuffer(
+    compile_and_execute_ttir(
         matmul,
         [lhs, rhs],
         target=target,
@@ -201,7 +201,7 @@ def test_matmul_ttnn_shapes_double_buffered(
         f"matmul-interchange=2,0,1",
         f"use-tile-matmul={use_tile_matmul}",
     ]
-    compile_ttir_to_flatbuffer(
+    compile_and_execute_ttir(
         matmul,
         [lhs, rhs],
         target=target,
