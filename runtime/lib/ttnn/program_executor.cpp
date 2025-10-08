@@ -189,7 +189,7 @@ void ProgramExecutor::sampleDeviceDRAMAfter(::ttnn::MeshDevice &meshDevice) {
   ;
   auto dram_memory_view = memory_view[tt::runtime::MemoryBufferType::DRAM];
 
-  LOG_INFO(
+  LOG_DEBUG(
       LogType::LogRuntimeTTNN,
       "KCM DRAM View - Banks (After): " +
           std::to_string(dram_memory_view.numBanks) + " Size: " +
