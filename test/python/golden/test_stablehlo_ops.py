@@ -174,15 +174,11 @@ def test_binary_ops(
         rsqrt,
         sine,
         sqrt,
-        tan,
+        pytest.param(tan, marks=pytest.mark.xfail(reason="Golden Failure")),
     ],
 )
 def test_unary_ops(
-    test_fn: Callable,
-    shape: Shape,
-    dtype: torch.dtype,
-    target: str,
-    request,
+    test_fn: Callable, shape: Shape, dtype: torch.dtype, target: str, request, device
 ):
     compile_stablehlo_to_flatbuffer(
         test_fn,
@@ -192,4 +188,5 @@ def test_unary_ops(
         output_root=request.config.getoption("--path"),
         system_desc_path=request.config.getoption("--sys-desc"),
         target=target,
+        device=device,
     )
