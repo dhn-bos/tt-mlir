@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
-import torch
 from typing import List
 
 from ttmlir.ir import *
@@ -15,6 +14,7 @@ from builder.base.builder_utils import compile_and_execute_ttir
 pytestmark = pytest.mark.frontend("ttir")
 
 
+@pytest.mark.skip_config(["p150"], ["p300"])
 @pytest.mark.xfail(reason="fails golden")
 @pytest.mark.parametrize("m", [2])
 @pytest.mark.parametrize("k", [4])
@@ -100,6 +100,7 @@ def test_matmul_multi_core_8otpc(m: int, k: int, n: int, target: str, request, d
     )
 
 
+@pytest.mark.skip_config(["p150"], ["p300"])
 @pytest.mark.xfail(reason="fails golden")
 @pytest.mark.parametrize(
     "shape",
@@ -159,6 +160,7 @@ def test_matmul_ttnn_shapes_single_buffered(
     )
 
 
+@pytest.mark.skip_config(["p150"], ["p300"])
 @pytest.mark.xfail(reason="fails golden")
 @pytest.mark.parametrize(
     "shape",
