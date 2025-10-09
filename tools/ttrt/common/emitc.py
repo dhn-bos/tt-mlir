@@ -3,26 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-import json
-import importlib.machinery
 import sys
 import signal
 import io
 import subprocess
 import time
-import socket
-from pkg_resources import get_distribution
 import shutil
-import atexit
 import traceback
-from pathlib import Path
-import csv
-import ast
-from functools import reduce
-import operator
 
 from ttrt.common.util import *
-from ttrt.common.query import Query
 from ttrt.common.run import Run
 
 
@@ -81,11 +70,11 @@ class EmitC:
             help="disable golden comparison for intermediate and output tensors",
         )
         EmitC.register_arg(
-            name="--disable-flatbuffer-comparison",
-            type=bool,
-            default=False,
-            choices=[True, False],
-            help="disable flatbuffer run and comparison",
+            name="--flatbuffer",
+            type=str,
+            default="",
+            choices=None,
+            help="Provide a file or directory path for flatbuffer binary files to compare outputs to",
         )
         EmitC.register_arg(
             name="--memory",
@@ -216,14 +205,26 @@ class EmitC:
         for path in emitc_dylib_paths:
             dylib = EmitCDylib(self.logger, self.file_manager, path)
             self.emitc_dylibs.append(dylib)
-            corresponding_ttnn_path = self.file_manager.find_so_corresponding_ttnn(path)
-
-            if corresponding_ttnn_path:
+            if self["--flatbuffer"]:
+                if os.path.isdir(self["--flatbuffer"]):
+                    corresponding_ttnn_path = (
+                        self.file_manager.find_corresponding_ttnn_in_directory(
+                            path, self["--flatbuffer"], ".so"
+                        )
+                    )
+                    if corresponding_ttnn_path is None:
+                        self.logging.warning(
+                            f"SKIP: no ttnn file found corresponding to dylib ={path} in directory={self['--flatbuffer']}"
+                        )
+                        continue
+                else:
+                    corresponding_ttnn_path = self["--flatbuffer"]
                 self.logging.debug(
-                    f"Found ttnn file corresponding to .so dylib ={corresponding_ttnn_path}"
+                    f"Found ttnn file corresponding to dylib ={corresponding_ttnn_path}"
                 )
                 bin = Binary(self.logger, self.file_manager, corresponding_ttnn_path)
                 try:
+                    bin.check_version(ignore=self["--ignore-version"])
                     self.ttnn_binaries[dylib] = bin
                 except Exception as e:
                     self.logging.warning(
@@ -249,7 +250,7 @@ class EmitC:
                 )
             return inputs_converted
 
-        def create_tensor(tensor):  # ***** check
+        def create_tensor(tensor):
             # Empty tensor if any of the dim is zero.
             isEmptyTensor = not all(tensor.shape)
 
@@ -275,9 +276,6 @@ class EmitC:
         if len(self.emitc_dylibs) == 0:
             self.logging.warning(f"no EmitC dylibs found to run - returning early")
             return
-
-        if "--init" in sys.argv:
-            self["--disable-golden"] = True
 
         # Initialize `device` to `None` for error handling in case device opening fails
         device = None
@@ -382,10 +380,10 @@ class EmitC:
                         self.logging.warning(
                             f"program index={int(self['--program-index'])} is greater than number of programs in: {bin.file_path} - skipping this test"
                         )
-                        return
+                        continue
 
                 if compare_to_ttnn:
-                    # Load input and output tensors from artifacts
+                    # Load input and output tensors for each program from artifacts
                     fbb_torch_inputs = self.load_tensors_from_artifacts(bin, "input")
                     fbb_torch_outputs = self.load_tensors_from_artifacts(
                         bin, "device_output"
@@ -397,18 +395,30 @@ class EmitC:
                     ):
                         continue
                     self.logging.debug(
-                        f"evaluating program={program_names[program_index]} for python file={dylib.file_path}"
+                        f"evaluating program={program_names[program_index]} for file={dylib.file_path}"
                     )
+                    emitc_artifact_path = f"{self.artifacts.get_emitc_dylib_folder_path(dylib)}/program_{program_index}"
 
                     if compare_to_ttnn:
                         fbb_runtime_inputs = []
-                        folder_path = f"{self.artifacts.get_emitc_dylib_folder_path(dylib)}/program_{program_index}"
 
                         for i, fbb_torch_input in enumerate(
                             fbb_torch_inputs["program_" + str(program_index)]
                         ):
                             new_input = create_tensor(fbb_torch_input)
                             fbb_runtime_inputs.append(new_input)
+
+                            if self["--save-artifacts"]:
+                                self.artifacts.save_torch_tensor(
+                                    emitc_artifact_path,
+                                    fbb_torch_input,
+                                    f"emitc_input_{i}.pt",
+                                )
+
+                            if self["--print-input-output-tensors"]:
+                                self.logging.info(
+                                    f"Input tensor {i}: {fbb_torch_input}"
+                                )
 
                         # pre-upload inputs
                         emitc_runtime_inputs = convert_input_layouts(
@@ -417,16 +427,6 @@ class EmitC:
                             bin.fbb,
                             program_index,
                         )
-
-                        if self["--save-artifacts"]:
-                            self.artifacts.save_torch_tensor(
-                                folder_path,
-                                fbb_torch_input,
-                                f"emitc_input_{i}.pt",
-                            )
-
-                        if self["--print-input-output-tensors"]:
-                            self.logging.info(f"Input tensor {i}: {fbb_torch_input}")
                     else:
                         emitc_runtime_inputs = ttrt.runtime.test.create_inputs(
                             emitc_dylib_handle,
@@ -440,7 +440,6 @@ class EmitC:
                             or self["--print-input-output-tensors"]
                             or compare_to_ttnn
                         ):
-                            folder_path = f"{self.artifacts.get_emitc_dylib_folder_path(dylib)}/program_{program_index}"
                             for i, emitc_runtime_input in enumerate(
                                 emitc_runtime_inputs
                             ):
@@ -473,7 +472,7 @@ class EmitC:
 
                                 if self["--save-artifacts"]:
                                     self.artifacts.save_torch_tensor(
-                                        folder_path,
+                                        emitc_artifact_path,
                                         emitc_torch_input,
                                         f"emitc_input_{i}.pt",
                                     )
@@ -497,7 +496,6 @@ class EmitC:
                         or self["--print-input-output-tensors"]
                         or compare_to_ttnn
                     ):
-                        folder_path = f"{self.artifacts.get_emitc_dylib_folder_path(dylib)}/program_{program_index}"
                         for i, emitc_runtime_output in enumerate(emitc_runtime_outputs):
                             emitc_torch_output = None
                             isEmptyTensor = not all(emitc_runtime_output.get_shape())
@@ -528,7 +526,7 @@ class EmitC:
 
                             if self["--save-artifacts"]:
                                 self.artifacts.save_torch_tensor(
-                                    folder_path,
+                                    emitc_artifact_path,
                                     emitc_torch_output,
                                     f"emitc_output_{i}.pt",
                                 )
@@ -540,9 +538,9 @@ class EmitC:
 
                         if compare_to_ttnn:
                             fbb_runtime_outputs = []
-                            for i, fbb_torch_output in enumerate(
-                                fbb_torch_outputs["program_" + str(program_index)]
-                            ):
+                            for fbb_torch_output in fbb_torch_outputs[
+                                "program_" + str(program_index)
+                            ]:
                                 new_output = create_tensor(fbb_torch_output)
                                 fbb_runtime_outputs.append(new_output)
 

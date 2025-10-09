@@ -598,8 +598,12 @@ class FileManager:
         so_files.sort()
         return so_files
 
-    def find_so_corresponding_ttnn(self, path):
-        ttnn_path = path.replace(".so", ".ttnn")
+    def find_corresponding_ttnn_in_directory(
+        self, path, ttnn_directory, file_extension
+    ):
+        filename = self.get_file_name(path)
+        ttnn_filename = filename.replace(file_extension, ".ttnn")
+        ttnn_path = os.path.join(ttnn_directory, ttnn_filename)
         if self.check_file_exists(ttnn_path):
             return ttnn_path
         return None
