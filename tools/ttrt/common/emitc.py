@@ -69,7 +69,7 @@ class EmitC:
         EmitC.register_arg(
             name="--result-file",
             type=str,
-            default="EmitC_results.json",
+            default="emitc_results.json",
             choices=None,
             help="test file to save results to",
         )
@@ -420,7 +420,7 @@ class EmitC:
                             device,
                             dylib.file_path,
                         )
-
+                    """
                     if self["--save-artifacts"]:
                         program_folder = f"{self.artifacts.get_dylib_emitc_folder_path(dylib)}/program_{program_index}"
                         for i, input_tensor in enumerate(inputs):
@@ -436,56 +436,62 @@ class EmitC:
                     if self["--print-input-output-tensors"]:
                         for i, input_tensor in enumerate(inputs):
                             self.logging.info(f"Input tensor {i}: {torch_input}")
-
+                    """
                     for loop in range(self["--loops"]):
-                        emitc_outputs = ttrt.runtime.test.run_so_program(
+                        emitc_runtime_outputs = ttrt.runtime.test.run_so_program(
                             emitc_dylib_handle,
                             program_names[program_index],
                             inputs,
                             device,
                         )
 
-                    # run.py line 875 has logic that could be useful here for saving inputs/outputs
+                        """
+                        if self["--save-artifacts"]:
+                            for i, output in enumerate(dylib_outputs):
+                                self.artifacts.save_torch_tensor(
+                                    program_folder,
+                                    torch_output,
+                                    f"emitpy_output_{i}.pt",
+                                )
 
-                    if self["--save-artifacts"]:
-                        for i, output in enumerate(dylib_outputs):
-                            self.artifacts.save_torch_tensor(
-                                program_folder,
-                                torch_output,
-                                f"emitpy_output_{i}.pt",
+                        if self["--print-input-output-tensors"]:
+                            for i, output_tensor in enumerate(dylib_outputs):
+                                self.logging.info(f"Output tensor {i}: {torch_output}")
+                        """
+
+                        if compare_to_ttnn:
+                            runtime_outputs = []
+                            for i in fbb_output_tensors[
+                                "program_" + str(program_index)
+                            ]:
+                                new_output = create_tensor(i)
+                                runtime_outputs.append(new_output)
+
+                            emitc_runtime_outputs = [
+                                ttrt.runtime.to_host(emitc_out, untilize=True)[0]
+                                for emitc_out in emitc_runtime_outputs
+                            ]
+                            self.logging.debug(
+                                f"got emitc outputs for program_index={program_index}, loop={loop}"
                             )
 
-                    if self["--print-input-output-tensors"]:
-                        for i, output_tensor in enumerate(dylib_outputs):
-                            self.logging.info(f"Output tensor {i}: {torch_output}")
-
-                    if compare_to_ttnn:
-                        runtime_outputs = []
-                        for i in fbb_output_tensors["program_" + str(program_index)]:
-                            new_output = create_tensor(i)
-                            runtime_outputs.append(new_output)
-
-                        emitc_outputs = [
-                            ttrt.runtime.to_host(emitc_out, untilize=True)[0]
-                            for emitc_out in emitc_outputs
-                        ]
-                        self.logging.debug(
-                            f"got emitc outputs for program_index={program_index}, loop={loop}"
-                        )
-
-                        all_tensors_match = ttrt.runtime.test.compare_outs(
-                            runtime_outputs, emitc_outputs
-                        )
-
-                        if not all_tensors_match:
-                            self.logging.error(
-                                "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+                            all_tensors_match = ttrt.runtime.test.compare_outs(
+                                runtime_outputs, emitc_runtime_outputs
                             )
-                            self.logging.error(fbb_output_tensors, emitc_outputs)
-                            raise Exception(
-                                "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+
+                            if not all_tensors_match:
+                                self.logging.error(
+                                    "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+                                )
+                                self.logging.error(
+                                    fbb_output_tensors, emitc_runtime_outputs
+                                )
+                                raise Exception(
+                                    "Failed: TTRT and EmitC outputs do not match! program_index={program_index}, loop={loop}"
+                                )
+                            self.logging.info(
+                                f"EmitC tensors match for {bin.file_path}"
                             )
-                        self.logging.info(f"EmitC tensors match for {bin.file_path}")
             except Exception as e:
                 result = "error"
                 if isinstance(e, TTRTTestException):
@@ -573,7 +579,8 @@ class EmitC:
     @staticmethod
     def generate_subparser(subparsers):
         emitc_parser = subparsers.add_parser(
-            "emitc", help="run EmitC Dylib tests and optionally compare outputs to TTNN"
+            "emitc",
+            help="run EmitC Dylib tests and optionally compare outputs to flatbuffer outputs",
         )
         emitc_parser.set_defaults(api=EmitC)
 
