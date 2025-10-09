@@ -632,7 +632,7 @@ class Artifacts:
     def get_binary_run_folder_path(self, binary):
         return f"{self.get_artifacts_folder_path()}/{binary.name}/run"
 
-    def get_dylib_emitc_folder_path(self, dylib):
+    def get_emitc_dylib_folder_path(self, dylib):
         return f"{self.get_artifacts_folder_path()}/{dylib.name}/emitc"
 
     def create_artifacts(self):
@@ -685,6 +685,14 @@ class Artifacts:
 
         if query != None:
             self.save_system_desc(query.system_desc, f"{binary_folder}")
+
+    def save_dylib(self, dylib, query=None):
+        dylib_folder = self.get_emitc_dylib_folder_path(dylib)
+
+        self.logging.info(
+            f"saving dylib={dylib.file_path} to dylib_folder={dylib_folder}"
+        )
+        self.file_manager.copy_file(f"{dylib_folder}", dylib.file_path)
 
     def save_torch_tensor(self, folder_path, torch_tensor, torch_tensor_name):
         import torch
