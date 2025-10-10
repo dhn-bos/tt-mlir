@@ -1124,7 +1124,7 @@ getOpOutputRef(OpContext opContextHandle,
     break;
   }
   case ::tt::target::ttnn::OpType::ViewOp: {
-    tensorRef = opContext.type_as_ViewOp()->in();
+    tensorRef = opContext.type_as_ViewOp()->out();
     break;
   }
   case ::tt::target::ttnn::OpType::SliceOp: {
