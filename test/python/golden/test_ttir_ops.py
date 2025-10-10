@@ -3496,6 +3496,42 @@ def test_hoisted_dot_general(
     )
 
 
+@x86_only
+@pytest.mark.parametrize(
+    "shapes",
+    [
+        [(10, 20), (20, 30)],
+        [(5, 10, 20), (5, 20, 30)],
+    ],
+    ids=["standard_2D_matmul", "3D_batched_matmul"],
+)
+@pytest.mark.parametrize("dtype", [torch.float32], ids=["f32"])
+@pytest.mark.parametrize("target", ["ttnn"])
+def test_hoisted_matmul(
+    shapes: List[Shape], dtype: torch.dtype, target: str, request, device
+):
+    def hoisted_matmul_wrapper(
+        in0: Operand,
+        in1: Operand,
+        builder: TTIRBuilder,
+        unit_attrs: Optional[List[str]] = None,
+    ):
+        return matmul(in0, in1, builder, unit_attrs=["ttir.should_hoist"])
+
+    hoisted_matmul_wrapper.__name__ = "hoisted_matmul"
+
+    compile_and_execute_ttir(
+        hoisted_matmul_wrapper,
+        shapes,
+        [dtype] * len(shapes),
+        test_base=request.node.name,
+        target=target,
+        device=device,
+        output_root=request.config.getoption("--path"),
+        system_desc_path=request.config.getoption("--sys-desc"),
+    )
+
+
 @pytest.mark.parametrize(
     "shape,normalized_shape",
     [
