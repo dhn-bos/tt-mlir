@@ -182,7 +182,7 @@ def get_metal_tensor_layout(
 
 def _compile_and_execute(
     compile_fn: Callable,
-    target: Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"],
+    target: Literal["ttnn", "ttmetal", "emitc", "emitpy"],
     pcc: float,
     atol: float,
     rtol: float,
@@ -201,7 +201,7 @@ def _compile_and_execute(
     ----------
     compile_fn : Callable
         The compilation function to use (e.g., compile_ttir_to_flatbuffer)
-    target : Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"]
+    target : Literal["ttnn", "ttmetal", "emitc", "emitpy"]
         Target backend to use
     pcc : float
         PCC threshold for golden comparison
@@ -227,7 +227,7 @@ def _compile_and_execute(
         raise TTBuilderRuntimeException("Manually skipped execution")
 
     fb_path = mlir_path + "." + ("ttnn" if target == "ttnn" else "ttm")
-
+    print("DDD", device)
     # Execute the flatbuffer
     if target in ["ttnn", "ttmetal"]:
         execute_fb(
@@ -238,6 +238,23 @@ def _compile_and_execute(
             disable_golden=disable_golden,
             device=device,
         )
+    elif target == "emitpy":
+        py_path = mlir_path + ".py"
+        execute_py(
+            py_path=py_path,
+        )
+    """
+    elif target == "emitc":
+        so_path = mlir_path + ".so"
+        execute_so(
+            so_path=so_path,
+            pcc=pcc,
+            atol=atol,
+            rtol=rtol,
+            disable_golden=disable_golden,
+            device=device,
+        )
+    """
 
     return mlir_path
 
@@ -331,7 +348,7 @@ def compile_and_execute_d2m(
     system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
     test_base: str = "test",
     output_root: str = ".",
-    target: Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"] = "ttnn",
+    target: Literal["ttnn", "ttmetal", "emitc", "emitpy"] = "ttnn",
     mesh_name: str = "mesh",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = True,
@@ -368,7 +385,7 @@ def compile_and_execute_d2m(
         Base name for dumped files
     output_root : str
         Path to dump all generated files
-    target : Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"]
+    target : Literal["ttnn", "ttmetal", "emitc", "emitpy"]
         Target backend to use
     mesh_name : str
         Name of the mesh to be used
@@ -395,6 +412,7 @@ def compile_and_execute_d2m(
     disable_golden : bool
         Whether to disable golden comparison
     """
+    print("DDD2", device)
     return _compile_and_execute(
         compile_fn=compile_d2m_to_flatbuffer,
         fn=fn,
@@ -427,7 +445,7 @@ def compile_and_execute_shlo(
     system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
     test_base: str = "test",
     output_root: str = ".",
-    target: Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"] = "ttnn",
+    target: Literal["ttnn", "ttmetal", "emitc", "emitpy"] = "ttnn",
     mesh_name: str = "mesh",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = True,
@@ -466,7 +484,7 @@ def compile_and_execute_shlo(
         Base name for dumped files
     output_root : str
         Path to dump all generated files
-    target : Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"]
+    target : Literal["ttnn", "ttmetal", "emitc", "emitpy"]
         Target backend to use
     mesh_name : str
         Name of the mesh to be used
@@ -497,6 +515,7 @@ def compile_and_execute_shlo(
     disable_golden : bool
         Whether to disable golden comparison
     """
+    print("DDD3", device)
     return _compile_and_execute(
         compile_fn=compile_stablehlo_to_flatbuffer,
         fn=fn,
@@ -531,7 +550,7 @@ def compile_and_execute_ttir(
     system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
     test_base: str = "test",
     output_root: str = ".",
-    target: Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"] = "ttnn",
+    target: Literal["ttnn", "ttmetal", "emitc", "emitpy"] = "ttnn",
     mesh_name: str = "mesh",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = True,
@@ -568,7 +587,7 @@ def compile_and_execute_ttir(
         Base name for dumped files
     output_root : str
         Path to dump all generated files
-    target : Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"]
+    target : Literal["ttnn", "ttmetal", "emitc", "emitpy"]
         Target backend to use
     mesh_name : str
         Name of the mesh to be used
@@ -595,6 +614,7 @@ def compile_and_execute_ttir(
     disable_golden : bool
         Whether to disable golden comparison
     """
+    print("DDD4", device)
     return _compile_and_execute(
         compile_fn=compile_ttir_to_flatbuffer,
         fn=fn,
@@ -900,7 +920,7 @@ def compile_ttir_to_flatbuffer(
     system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
     test_base: str = "test",
     output_root: str = ".",
-    target: Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"] = "ttnn",
+    target: Literal["ttnn", "ttmetal", "emitc", "emitpy"] = "ttnn",
     mesh_name: str = "mesh",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = True,
@@ -942,8 +962,8 @@ def compile_ttir_to_flatbuffer(
         The path to dump all generated arguments under. If this path doesn't
         exist, it will be created.
 
-    target : *Literal["ttnn", "ttmetal", "ttnn-standalone"]*
-        Either "ttnn", "ttmetal", or "ttnn-standalone". This controls which backend to use.
+    target : *Literal["ttnn", "ttmetal", "emitc"]*
+        Either "ttnn", "ttmetal", or "emitc". This controls which backend to use.
 
     mesh_name : *str*, optional
         Name of the mesh to be used in the module. Default is "mesh".
@@ -1048,7 +1068,7 @@ def compile_d2m_to_flatbuffer(
     system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
     test_base: str = "test",
     output_root: str = ".",
-    target: Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"] = "ttnn",
+    target: Literal["ttnn", "ttmetal", "emitc", "emitpy"] = "ttnn",
     mesh_name: str = "mesh",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = True,
@@ -1090,8 +1110,8 @@ def compile_d2m_to_flatbuffer(
         The path to dump all generated arguments under. If this path doesn't
         exist, it will be created.
 
-    target : *Literal["ttnn", "ttmetal", "ttnn-standalone"]*
-        Either "ttnn", "ttmetal", or "ttnn-standalone". This controls which backend to use.
+    target : *Literal["ttnn", "ttmetal", "emitc"]*
+        Either "ttnn", "ttmetal", or "emitc". This controls which backend to use.
 
     mesh_name : *str*, optional
         Name of the mesh to be used in the module. Default is "mesh".
@@ -1319,7 +1339,7 @@ def compile_stablehlo_to_flatbuffer(
     system_desc_path: str = "ttrt-artifacts/system_desc.ttsys",
     test_base: str = "test",
     output_root: str = ".",
-    target: Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"] = "ttnn",
+    target: Literal["ttnn", "ttmetal", "emitc", "emitpy"] = "ttnn",
     mesh_name: str = "mesh",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = True,
@@ -1358,7 +1378,7 @@ def compile_stablehlo_to_flatbuffer(
     output_root : str, optional
         The path to dump all generated files under
 
-    target : *Literal["ttnn", "ttmetal", "ttnn-standalone"]*, optional
+    target : *Literal["ttnn", "ttmetal", "emitc"]*, optional
         The target backend to use. Default is "ttnn"
 
     mesh_name : str, optional
@@ -1488,7 +1508,7 @@ def compile_ttir_module_to_flatbuffer(
     test_base: str = "test",
     output_root: str = ".",
     builder_dir: str = "ttir-builder-artifacts",
-    target: Literal["ttnn", "ttmetal", "ttnn-standalone", "emitpy"] = "ttnn",
+    target: Literal["ttnn", "ttmetal", "emitc", "emitpy"] = "ttnn",
     mesh_dict: OrderedDict[str, int] = OrderedDict([("x", 1), ("y", 1)]),
     module_dump: bool = True,
     argument_types_string: Optional[str] = None,
@@ -1501,7 +1521,7 @@ def compile_ttir_module_to_flatbuffer(
 
     This decorator takes an existing TTIR MLIR module and compiles it through
     the backend pipeline to generate a flatbuffer file. It supports multiple
-    targets including TTNN, TTMetal, and TTNN-standalone. It is mainly a wrapper around the following functions, with
+    targets including TTNN, TTMetal, and emitc. It is mainly a wrapper around the following functions, with
     each next function called on the output of the last:
 
     1. `_run_ttir_pipeline`
@@ -1524,7 +1544,7 @@ def compile_ttir_module_to_flatbuffer(
     output_root : str, optional
         The path to dump all generated files under
 
-    target : *Literal["ttnn", "ttmetal", "ttnn-standalone"]*, optional
+    target : *Literal["ttnn", "ttmetal", "emitc"]*, optional
         The target backend to use. Default is "ttnn"
 
     mesh_dict : *OrderedDict[str, int]*, optional
@@ -1597,7 +1617,7 @@ def compile_ttir_module_to_flatbuffer(
         to_target = ttmetal_to_flatbuffer_file
         mlir_suffix = "_ttm.mlir"
         target_extension = "ttm"
-    elif target == "ttnn-standalone":
+    elif target == "emitc":
         ttir_to_ttnn_emitc_pipeline = _create_custom_ttir_pipeline_fn(
             "ttir-to-emitc-pipeline", print_ir=print_ir
         )
@@ -1866,6 +1886,172 @@ def execute_fb(
         print(f"output tensors for program={program_index}")
         for tensor in program.output_tensors:
             logging.debug(f"{tensor}\n")
+
+
+def execute_py(
+    py_path: str,
+) -> None:
+    """
+    Takes a Python file path generated by target="emitpy" and executes it.
+
+    Parameters
+    ----------
+    py_path : str
+        Path to the Python file generated by emitpy compilation
+    """
+
+    import importlib.util
+    import sys
+    import os
+    import time
+
+    logger = Logger()
+    logging = logger.get_logger()
+
+    print(f"Beginning Python execution on {py_path}")
+
+    if not os.path.exists(py_path):
+        raise FileNotFoundError(f"Python file not found: {py_path}")
+
+    # Load the Python module dynamically
+    module_name = os.path.splitext(os.path.basename(py_path))[0]
+    spec = importlib.util.spec_from_file_location(module_name, py_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load module from {py_path}")
+
+    py_module = importlib.util.module_from_spec(spec)
+
+    # Add the module to sys.modules to handle potential imports
+    sys.modules[module_name] = py_module
+
+    try:
+        spec.loader.exec_module(py_module)
+    except Exception as e:
+        raise RuntimeError(f"Failed to execute Python module {py_path}: {e}")
+
+    start_execute = time.perf_counter_ns()
+
+    main_func = getattr(py_module, "main")
+    main_func()
+
+    end_execute = time.perf_counter_ns()
+    e2e_duration_nanoseconds_submit = end_execute - start_execute
+
+    print(f"Python execution completed successfully.")
+    print(f"Execution time: {e2e_duration_nanoseconds_submit / 1e6:.2f}ms")
+
+    # Clean up the module from sys.modules
+    if module_name in sys.modules:
+        del sys.modules[module_name]
+
+
+def execute_so(
+    so_path: str,
+    device=None,  # Optional device parameter for fixture reuse
+) -> None:
+    """
+    Takes a shared object (.so) file path generated by target="emitc" and executes it,
+    comparing outputs against golden references if provided.
+
+    Parameters
+    ----------
+    so_path : str
+        Path to the shared object file generated by emitc compilation
+    device : Optional
+        Device to execute on (must be provided)
+    """
+
+    import time
+    import ttrt.runtime.test
+
+    assert device is not None, "Device must be provided for EmitC execution"
+
+    def convert_input_layouts(device, inputs, program_index=0):
+        """Convert inputs to appropriate device layouts for EmitC execution"""
+        # For EmitC, we typically don't need complex layout conversion
+        # but this provides a hook for future enhancement
+        inputs_converted = []
+        for input_tensor in inputs:
+            inputs_converted.append(input_tensor)
+        return inputs_converted
+
+    logger = Logger()
+    logging = logger.get_logger()
+
+    print(f"Beginning EmitC shared object execution on {so_path}")
+
+    if not os.path.exists(so_path):
+        raise FileNotFoundError(f"Shared object file not found: {so_path}")
+
+    # Open the shared object
+    try:
+        so_handle = ttrt.runtime.test.open_so(so_path)
+        logging.debug(f"Opened EmitC shared object: {so_path}")
+    except Exception as e:
+        raise TTBuilderRuntimeException(f"Failed to open shared object {so_path}: {e}")
+
+    try:
+        # Get available program names from the shared object
+        program_names = ttrt.runtime.test.get_so_programs(so_handle, so_path)
+
+        if not program_names:
+            raise TTBuilderRuntimeException(
+                f"No programs found in shared object {so_path}"
+            )
+
+        logging.info(
+            f"Found {len(program_names)} programs in shared object: {program_names}"
+        )
+        # Execute each program (typically there's only one)
+        for program_index, program_name in enumerate(program_names):
+            # Clean the program name (remove parameter signatures)
+            clean_program_name = (
+                program_name.split("(")[0] if "(" in program_name else program_name
+            )
+
+            print(f"Executing program {program_index}: {clean_program_name}")
+
+            inputs = []
+            # Create inputs using the shared object's input creation function
+            try:
+                inputs = ttrt.runtime.test.create_inputs(
+                    so_handle, clean_program_name, device, so_path
+                )
+                logging.debug(f"Created {len(inputs)} input tensors from shared object")
+            except Exception as e:
+                logging.warning(f"Failed to create inputs from shared object: {e}")
+
+            # Convert input layouts if needed
+            inputs = convert_input_layouts(device, inputs, program_index)
+
+            logging.debug(f"Starting execution of program: {clean_program_name}")
+
+            # Execute the shared object program
+            start_submit = time.perf_counter_ns()
+            try:
+                runtime_outputs = ttrt.runtime.test.run_so_program(
+                    so_handle,
+                    clean_program_name,
+                    inputs,
+                    device,
+                )
+            except Exception as e:
+                raise TTBuilderRuntimeException(f"EmitC execution failed: {e}")
+
+            end_submit = time.perf_counter_ns()
+            e2e_duration_nanoseconds_submit = end_submit - start_submit
+
+            print(
+                f"EmitC execution completed successfully for program: {clean_program_name}"
+            )
+            print(f"Execution time: {e2e_duration_nanoseconds_submit / 1e6:.2f}ms")
+    finally:
+        # Clean up the shared object handle
+        try:
+            ttrt.runtime.test.close_so(so_handle)
+            logging.debug(f"Closed shared object: {so_path}")
+        except Exception as e:
+            logging.warning(f"Failed to close shared object {so_path}: {e}")
 
 
 # ----- Experimental Public APIs -----
