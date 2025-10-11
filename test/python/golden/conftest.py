@@ -12,7 +12,7 @@ import torch
 import subprocess
 from typing import Any, Dict, List, Tuple, Optional
 
-ALL_BACKENDS = set(["ttnn", "ttmetal", "ttnn-standalone", "emitpy"])
+ALL_BACKENDS = set(["ttnn", "ttmetal", "emitc", "emitpy"])
 ALL_SYSTEMS = set(["n150", "n300", "llmbox", "tg", "p150", "p300"])
 
 
@@ -63,7 +63,7 @@ def _get_device_for_target(target: str, mesh_shape: Tuple[int, int], pytestconfi
 
     device_runtime_enum = None
 
-    if target == "ttnn":
+    if target in ["ttnn", "emitc"]:
         device_runtime_enum = ttrt.runtime.DeviceRuntime.TTNN
     elif target == "ttmetal":
         device_runtime_enum = ttrt.runtime.DeviceRuntime.TTMetal
@@ -135,7 +135,7 @@ def device(request, pytestconfig):
         target = request.node.callspec.params.get("target", "ttnn")
 
         # Support for other backends coming soon.
-        if target not in ["ttnn", "ttmetal"]:
+        if target not in ["ttnn", "ttmetal", "emitc"]:
             return None
 
         mesh_shape = request.node.callspec.params.get("mesh_shape", (1, 1))
@@ -383,7 +383,7 @@ def pytest_runtest_setup(item: pytest.Item):
        - input_dtypes: List of abbreviated data type strings (e.g., "f32", "i32")
        - op_name: Name of the operation being tested
        - framework_op_name: Framework-specific operation name (currently same as op_name)
-       - backend: Target backend ("ttnn", "ttmetal", or "ttnn-standalone")
+       - backend: Target backend ("ttnn", "ttmetal", or "emitc")
 
     2. Prefixed properties: Operation-specific parameters with "param_" prefix. For `conv2d`, e.g.:
        - param_stride: Convolution stride parameters

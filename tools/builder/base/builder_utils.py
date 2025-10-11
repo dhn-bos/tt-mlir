@@ -85,9 +85,6 @@ def get_metal_tensor_layout(
     memorySpace=ttcore.MemorySpace.DeviceL1,
     grid: Optional[Tuple[int, int]] = None,
     index_map: Optional[AffineMap] = None,
-    memory_layout: Optional[
-        ttcore.TensorMemoryLayout
-    ] = ttcore.TensorMemoryLayout.Sharded,
 ) -> RankedTensorType:
     """
     Create a metal tensor layout.
@@ -227,7 +224,6 @@ def _compile_and_execute(
         raise TTBuilderRuntimeException("Manually skipped execution")
 
     fb_path = mlir_path + "." + ("ttnn" if target == "ttnn" else "ttm")
-    print("DDD", device)
     # Execute the flatbuffer
     if target in ["ttnn", "ttmetal"]:
         execute_fb(
@@ -243,18 +239,12 @@ def _compile_and_execute(
         execute_py(
             py_path=py_path,
         )
-    """
     elif target == "emitc":
         so_path = mlir_path + ".so"
         execute_so(
             so_path=so_path,
-            pcc=pcc,
-            atol=atol,
-            rtol=rtol,
-            disable_golden=disable_golden,
             device=device,
         )
-    """
 
     return mlir_path
 
@@ -412,7 +402,6 @@ def compile_and_execute_d2m(
     disable_golden : bool
         Whether to disable golden comparison
     """
-    print("DDD2", device)
     return _compile_and_execute(
         compile_fn=compile_d2m_to_flatbuffer,
         fn=fn,
@@ -515,7 +504,6 @@ def compile_and_execute_shlo(
     disable_golden : bool
         Whether to disable golden comparison
     """
-    print("DDD3", device)
     return _compile_and_execute(
         compile_fn=compile_stablehlo_to_flatbuffer,
         fn=fn,
@@ -614,7 +602,6 @@ def compile_and_execute_ttir(
     disable_golden : bool
         Whether to disable golden comparison
     """
-    print("DDD4", device)
     return _compile_and_execute(
         compile_fn=compile_ttir_to_flatbuffer,
         fn=fn,
@@ -1962,7 +1949,7 @@ def execute_so(
     """
 
     import time
-    import ttrt.runtime.test
+    import ttrt.runtime
 
     assert device is not None, "Device must be provided for EmitC execution"
 
