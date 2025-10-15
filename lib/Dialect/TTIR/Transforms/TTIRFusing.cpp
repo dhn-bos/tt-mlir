@@ -2006,7 +2006,7 @@ public:
     rewriter.replaceAllUsesWith(permuteOps[2].getResult(),
                                 splitOp.getResult(2));
 
-    return mlir::success();
+    assert(false && "Failing split heads on purpose to test CI.");
   }
 
 private:
