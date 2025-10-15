@@ -171,8 +171,6 @@ TTNNOperandsWorkaroundsFactory::createUpsampleOpOperandsWorkarounds() {
       .addOutputOperandWorkaround(rowMajorLayoutBF16Workaround);
 }
 
-// Factory method to create a set of workarounds for ScatterOp. The ScatterOp
-// expects the input to be in row-major layout if using f32.
 TTNNOperandsWorkarounds
 TTNNOperandsWorkaroundsFactory::createScatterOpOperandsWorkarounds(
     mlir::Operation *op) {
@@ -182,24 +180,21 @@ TTNNOperandsWorkaroundsFactory::createScatterOpOperandsWorkarounds(
   auto sourceType =
       mlir::cast<mlir::RankedTensorType>(scatterOp.getSourceTensor().getType());
 
-  ttnn::TTNNLayoutAttr inputLayoutAttr =
-      mlir::cast<ttnn::TTNNLayoutAttr>(inputType.getEncoding());
-  ttnn::TTNNLayoutAttr sourceLayoutAttr =
-      mlir::cast<ttnn::TTNNLayoutAttr>(sourceType.getEncoding());
-
-  bool isLayoutWorkaroundRequired =
-      (inputLayoutAttr.isTiled() && inputType.getElementType().isF32()) ||
-      (sourceLayoutAttr.isTiled() && sourceType.getElementType().isF32());
+  bool isDataTypeWorkaroundRequired = (inputType.getElementType().isF32() &&
+                                       sourceType.getElementType().isF32());
 
   TTNNOperandWorkarounds operandWorkaround;
 
-  if (isLayoutWorkaroundRequired) {
-    operandWorkaround.tensorLayoutWorkaround = Layout::RowMajor;
+  if (isDataTypeWorkaroundRequired) {
+    operandWorkaround.tensorDataTypeWorkaround =
+        mlir::tt::ttcore::DataType::BFloat16;
   }
 
   return TTNNOperandsWorkarounds::createEmptyTTNNOperandsWorkarounds()
-      .addInputOperandWorkaround(operandWorkaround)   // input_tensor
-      .addInputOperandWorkaround(operandWorkaround)   // index_tensor
+      .addInputOperandWorkaround(operandWorkaround) // input_tensor
+      .addInputOperandWorkaround(
+          TTNNOperandWorkarounds::
+              createEmptyTTNNOperandWorkarounds())    // index_tensor
       .addInputOperandWorkaround(operandWorkaround)   // source_tensor
       .addOutputOperandWorkaround(operandWorkaround); // result
 }
