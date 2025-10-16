@@ -40,6 +40,8 @@ void createTTNNPipelineTTIRPasses(
   pm.addPass(
       mlir::tt::ttcore::createTTPopulateArgumentTypes(options.argumentTypeMap));
   pm.addPass(mlir::createCanonicalizerPass());
+  std::cout << "********* enable fusing conv2d with multiply pattern: "
+            << options.enableFusingConv2dWithMultiplyPattern << std::endl;
   ttir::TTIRFusingOptions fusingOptions{
       options.enableFusingConv2dWithMultiplyPattern,
       options.enableFusingGlobalPoolPattern};

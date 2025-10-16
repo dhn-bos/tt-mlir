@@ -119,7 +119,9 @@ def main():
     args = parse_arguments()
 
     # Validate input file exists
-    if not args.input_file.exists() and args.input_file.endswith(".mlir"):
+    if args.input_file.suffix != ".mlir":
+        raise ValueError(f"Expected an .mlir file, got: {args.input_file}")
+    if not args.input_file.exists():
         raise FileNotFoundError(f"Input file does not exist: {args.input_file}")
 
     # Ensure output directory exists and is writable
@@ -145,8 +147,7 @@ def main():
         ttir_module, ttnn_module = chisel_pipeline(args.input_file)
     except Exception as e:
         raise RuntimeError(f"Failed to compile TTIR pipeline: {e}")
-
-    ttnn_to_flatbuffer_file(ttnn_module, str(args.flatbuffer_path))
+    ttnn_to_flatbuffer_file(ttnn_module, str(args.flatbuffer_path), {}, {})
 
     print("TTIR compilation completed successfully")
 

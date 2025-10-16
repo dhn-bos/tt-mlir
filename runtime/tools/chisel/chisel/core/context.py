@@ -46,7 +46,7 @@ from ttrt.runtime import (
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("chisel")
 
-DEBUG = True
+DEBUG = False
 
 
 class ChiselContext:

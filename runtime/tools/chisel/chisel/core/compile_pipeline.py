@@ -47,10 +47,17 @@ def run_ttir_to_ttnn(module_str: str, ctx) -> Module:
     """
 
     pass_params = {
+        # "enable-bfp8-conversion": "true",
+        "enable-fusing-conv2d-with-multiply-pattern": "true",
         "enable-erase-inverse-ops-pass": "false",
         "enable-const-eval": "false",
         "system-desc-path": "ttrt-artifacts/system_desc.ttsys",  # TODO: make this configurable as in the rest of the code
     }
+
+    string_1 = "builtin.module(ttir-to-ttnn-backend-pipeline{{{}}})".format(
+        " ".join([f"{k}={v}" for k, v in pass_params.items()])
+    )
+    print("******* ", string_1)
     pm = PassManager.parse(
         "builtin.module(ttir-to-ttnn-backend-pipeline{{{}}})".format(
             " ".join([f"{k}={v}" for k, v in pass_params.items()])
