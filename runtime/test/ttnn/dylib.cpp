@@ -9,6 +9,8 @@
 #include "tt/runtime/runtime.h"
 #include "tt/runtime/types.h"
 #include "tt/runtime/utils.h"
+#include <fmt/core.h>
+#include <iostream>
 
 #include <dlfcn.h>
 
@@ -157,6 +159,7 @@ createInputs(void *so, std::string funcName, Device device, std::string path) {
 
   // Call setDevice function from dylib.
   //
+  std::cout << "fmt version: " << FMT_VERSION << std::endl;
   void *setDeviceSymbol = dlsym(so, "setDevice");
   const char *setDeviceError = dlerror();
   if (setDeviceError) {
@@ -173,6 +176,7 @@ createInputs(void *so, std::string funcName, Device device, std::string path) {
   using CreateInputsFunction = std::vector<::ttnn::Tensor> (*)();
   std::string mangledCreateInputsName =
       getCreateInputsMangledName(funcName, path);
+  std::cout << "fmt version: " << FMT_VERSION << std::endl;
   void *createInputsSymbol = dlsym(so, mangledCreateInputsName.c_str());
   char *dlsymError = dlerror();
   if (dlsymError) {
@@ -211,6 +215,7 @@ runSoProgram(void *so, const std::string &funcName,
 
   // Call setDevice function from dylib.
   //
+  std::cout << "fmt version: " << FMT_VERSION << std::endl;
   void *setDeviceSymbol = dlsym(so, "setDevice");
   const char *setDeviceError = dlerror();
   if (setDeviceError) {
@@ -234,7 +239,7 @@ runSoProgram(void *so, const std::string &funcName,
   //
   using ForwardFunction =
       std::vector<::ttnn::Tensor> (*)(std::vector<::ttnn::Tensor>);
-
+  std::cout << "fmt version: " << FMT_VERSION << std::endl;
   std::string mangledName;
   mangledName = getMangledName(funcName);
   void *symbol = dlsym(so, mangledName.c_str());

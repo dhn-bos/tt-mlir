@@ -307,11 +307,13 @@ class EmitPy:
                     self.logging.info(
                         f"test command for binary={bin.file_path} is: {test_command}"
                     )
+                    print("Debug 0")
                     testProcess = subprocess.Popen(
                         [test_command],
                         shell=True,
                         preexec_fn=os.setsid,
                     )
+                    print("Debug 1")
 
                     def signal_handler(sig, frame):
                         os.killpg(os.getpgid(testProcess.pid), signal.SIGTERM)
@@ -323,8 +325,9 @@ class EmitPy:
 
                 self.logging.debug(f"loading module from file: {dylib.file_path}")
                 # Get the module name from the file path
+                print("Debug 2")
                 module_name = os.path.splitext(os.path.basename(dylib.file_path))[0]
-
+                print("Debug 3")
                 # Load the module from the file path
                 spec = importlib.util.spec_from_file_location(
                     module_name, dylib.file_path
@@ -339,7 +342,7 @@ class EmitPy:
                 self.logging.debug(
                     f"module {module_name} loaded and executed successfully"
                 )
-
+                print("Debug 4")
                 # Parse the AST to find function names
                 with open(dylib.file_path, "r") as f:
                     source_code = f.read()
@@ -353,7 +356,7 @@ class EmitPy:
                         and node.name[0:18] != "create_inputs_for_"
                     ):
                         program_names.append(node.name)
-
+                print("Debug 5")
                 self.logging.debug(f"Program names found: {program_names}")
 
                 if self["--program-index"] != "all":
@@ -430,6 +433,7 @@ class EmitPy:
                                         f"Output tensor {i}: {torch_output}"
                                     )
                 else:
+                    print("Debug 7")
                     with ttnn.manage_device(device_id=0) as device:
                         for program_index, program_name in enumerate(program_names):
                             if self[
@@ -467,7 +471,7 @@ class EmitPy:
                                         ),
                                     )
                                 )
-
+                            print("Debug 8")
                             # Save artifacts before they get deallocated
                             if self["--save-artifacts"]:
                                 program_folder = f"{self.artifacts.get_dylib_emitpy_folder_path(dylib)}/program_{program_index}"
@@ -487,6 +491,7 @@ class EmitPy:
                                     )
 
                             for loop in range(self["--loops"]):
+                                print("Debug 9")
                                 self.logging.debug(
                                     f"starting loop={loop+1}/{self['--loops']} for program={program_name}"
                                 )
@@ -512,7 +517,7 @@ class EmitPy:
                                         bin, "device_output", fbb_run_directory
                                     )["program_" + str(program_index)]
                                 )
-
+                                print("Debug 8")
                                 if self["--save-artifacts"]:
                                     program_folder = f"{self.artifacts.get_dylib_emitpy_folder_path(dylib)}/program_{program_index}"
                                     for i, output in enumerate(torch_dylib_outputs):

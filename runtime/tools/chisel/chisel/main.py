@@ -132,6 +132,7 @@ def main():
 
     # Validate report path directory is writable
     try:
+        print(args.report_path)
         args.report_path.parent.mkdir(parents=True, exist_ok=True)
     except (PermissionError, OSError) as e:
         raise PermissionError(
