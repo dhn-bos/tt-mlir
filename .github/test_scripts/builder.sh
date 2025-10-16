@@ -27,6 +27,7 @@ pytest "$1" -m "$2" $PYTEST_ARGS -v --junit-xml=$TEST_REPORT_PATH
 if [[ "$runttrt" == "1" ]]; then
     if [ -d ttir-builder-artifacts/emitpy ]; then
         # Create renamed copies of ttnn files so emitpy can find them for comparison
+        echo "Debug hang 0"
         for file in ttir-builder-artifacts/emitpy/*; do
             if [ -f "$file" ] && [[ "$file" == *.py ]]; then
                 # Get the basename of the .py file
@@ -52,19 +53,26 @@ if [[ "$runttrt" == "1" ]]; then
                 fi
             fi
         done
+        echo "Debug hang 1"
         ttrt emitpy $TTRT_ARGS ttir-builder-artifacts/emitpy/ --flatbuffer ttir-builder-artifacts/ttnn/
+        echo "Debug hang 2"
         cp emitpy_results.json ${TTRT_REPORT_PATH%_*}_ttir_${TTRT_REPORT_PATH##*_} || true
+        echo "Debug hang 3"
         cp ttrt_report.xml ${TEST_REPORT_PATH%_*}_ttir_emitpy_${TEST_REPORT_PATH##*_} || true
     fi
+    echo "Debug hang 3.5"
     if [ -d ttir-builder-artifacts/emitc ]; then
+        echo "Debug hang 4"
         export TT_METAL_LIB="${INSTALL_DIR}/lib"
+        echo "Debug hang 5"
         ${INSTALL_DIR}/tools/ttnn-standalone/ci_compile_dylib.py --dir ttir-builder-artifacts/emitc
+        echo "Debug hang 6"
         # Create renamed copies of ttnn files so emitc can find them for comparison
         for file in ttir-builder-artifacts/emitc/*; do
             if [ -f "$file" ] && [[ "$file" == *.so ]]; then
                 # Get the basename of the .so file
                 basename_file=$(basename "$file")
-
+                echo "Processing file: $basename_file"
                 # Create the corresponding TTNN filename by replacing "emitc" with "ttnn" and ".so" with ".ttnn"
                 ttnn_basename=$(echo "$basename_file" | sed 's/emitc/ttnn/' | sed 's/\.so$/.ttnn/')
                 ttnn_file="ttir-builder-artifacts/ttnn/$ttnn_basename"

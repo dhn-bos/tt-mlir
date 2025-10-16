@@ -5,6 +5,8 @@
 
 set -e -o pipefail
 
+export LD_LIBRARY_PATH="${TTMLIR_TOOLCHAIN_DIR}/lib:${LD_LIBRARY_PATH}"
+llvm-lit -sv --xunit-xml-output $TEST_REPORT_PATH $BUILD_DIR/test/ttmlir/EmitC/TTNN
 ttrt emitc $BUILD_DIR/test/ttmlir/EmitC/TTNN --flatbuffer $BUILD_DIR/test/ttmlir/EmitC/TTNN
 cp emitc_results.json ${TTRT_REPORT_PATH} || true
 cp ttrt_report.xml ${TEST_REPORT_PATH%_*}_emitc_${TEST_REPORT_PATH##*_} || true
