@@ -80,7 +80,8 @@ DestRegisterAnalysis::DestRegisterAnalysis(Operation *op) {
           outputIndex = nextAvailableIndex++;
         }
         opToDstIndex[innerOp] = outputIndex;
-        info.computeOpMap[innerOp] = outputIndex;
+        // Store the intermediate DST slice indices for this compute op.
+        info.dstSliceIndices.push_back(outputIndex);
       }
     });
 

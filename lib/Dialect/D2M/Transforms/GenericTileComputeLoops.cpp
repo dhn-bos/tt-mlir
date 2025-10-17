@@ -204,13 +204,30 @@ public:
   void runOnOperation() final {
 
     // Run the analysis once before any pattern rewriting
-    DestRegisterAnalysis analysis(getOperation());
+    DestRegisterAnalysis &analysis = getAnalysis<DestRegisterAnalysis>();
+
+    // Print debug information for each generic op's compute map.
+    llvm::errs() << "\n=== DestRegisterAnalysis Results ===\n";
+    for (auto &[genericOp, dstInfo] : analysis.genericOpMap) {
+      llvm::errs() << "GenericOp: " << genericOp->getName().getStringRef()
+                   << " (max DST usage: " << dstInfo.dstMaxUsage << ")\n";
+      llvm::errs() << "  DST Slice Indices (" << dstInfo.dstSliceIndices.size()
+                   << " compute ops): ";
+      for (int idx : dstInfo.dstSliceIndices) {
+        llvm::errs() << idx << " ";
+      }
+      llvm::errs() << "\n";
+    }
+    llvm::errs() << "====================================\n\n";
 
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
     patterns.add<D2MGenericComputeRewriter>(
         ctx, maxDstPhysicalSizeTiles.getValue(), &analysis);
     walkAndApplyPatterns(getOperation(), std::move(patterns));
+
+    // Mark the analysis as preserved for use by downstream passes
+    markAnalysesPreserved<DestRegisterAnalysis>();
   }
 };
 } // namespace
