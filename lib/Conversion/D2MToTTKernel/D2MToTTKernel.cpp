@@ -501,7 +501,14 @@ public:
       // address space of the source memref.
       Value aTileIndex = adaptor.getA();
       Value bTileIndex = adaptor.getB();
-      aTileIndex.dump();
+
+      // If the input didn't come from a subview, we'll expect the CB directly which implicitly comes from an unrealized conversion cast.  This is a special case where we're reading from offset 0.
+      if (mlir::isa_and_nonnull<UnrealizedConversionCastOp>(aTileIndex.getDefiningOp())) {
+        aTileIndex = index(rewriter, op.getLoc(), 0);
+      }
+      if (mlir::isa_and_nonnull<UnrealizedConversionCastOp>(bTileIndex.getDefiningOp())) {
+        bTileIndex = index(rewriter, op.getLoc(), 0);
+      }
 
       rewriter.create<ttkernel::ExperimentalMatmulBlockOp>(
           op->getLoc(), cbA, cbB, aTileIndex, bTileIndex, destIndex, transpose,
