@@ -182,7 +182,7 @@ public:
                                              outputCB);
             yield = outputCB;
           } else {
-            // Note: Naturally you'd think to use a PopOp since this is in input
+            // Note: Naturally you'd think to use a WaitOp since this is in input
             // cb, but in the layout lowering there is no producer thread.  The
             // ReserveOp here effectively unwraps the CB so the DMA can access
             // it.
@@ -212,7 +212,7 @@ public:
     rewriter.replaceOpWithNewOp<GenericOp>(
         op, op.getInput(), op.getOutput(),
         [=](OpBuilder &builder, Location loc, ValueRange blockArgs) {
-          Value src = builder.create<PopOp>(loc, blockArgs[0]).getResult();
+          Value src = builder.create<WaitOp>(loc, blockArgs[0]).getResult();
           Value dst = builder.create<ReserveOp>(loc, blockArgs[1]).getResult();
           if (inputTiled) {
             builder.create<TileUntilizeBlockOp>(loc, src, dst);

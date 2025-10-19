@@ -317,7 +317,7 @@ public:
                memref.getDefiningOp())) {
       memref = subView.getSource();
     }
-    if (mlir::isa_and_nonnull<d2m::PopOp, d2m::ReserveOp>(
+    if (mlir::isa_and_nonnull<d2m::WaitOp, d2m::ReserveOp>(
             memref.getDefiningOp())) {
       memref = memref.getDefiningOp()->getOperand(0);
     }

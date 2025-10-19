@@ -695,7 +695,7 @@ public:
   using OpConversionPattern<ConcreteOp>::OpConversionPattern;
 
   static Value findPreLinearizedMemref(Value memref) {
-    if (mlir::isa_and_nonnull<d2m::PopOp, d2m::ReserveOp>(
+    if (mlir::isa_and_nonnull<d2m::WaitOp, d2m::ReserveOp>(
             memref.getDefiningOp())) {
       return memref;
     }
@@ -833,7 +833,7 @@ class D2MCBOpRewriter : public OpConversionPattern<D2MCBOp> {
 public:
   using OpConversionPattern<D2MCBOp>::OpConversionPattern;
 
-  static_assert(std::is_same_v<D2MCBOp, d2m::PopOp> ||
+  static_assert(std::is_same_v<D2MCBOp, d2m::WaitOp> ||
                 std::is_same_v<D2MCBOp, d2m::ReserveOp>);
 
   LogicalResult
@@ -1483,7 +1483,7 @@ void populateD2MToTTKernelPatterns(
                ttkernel::AcquireDstRewriter,
                ttkernel::MemrefLoadRewriter,
                ttkernel::MemrefStoreRewriter,
-               ttkernel::D2MCBOpRewriter<d2m::PopOp, ttkernel::CBWaitFrontOp, ttkernel::CBPopFrontOp>,
+               ttkernel::D2MCBOpRewriter<d2m::WaitOp, ttkernel::CBWaitFrontOp, ttkernel::CBPopFrontOp>,
                ttkernel::D2MCBOpRewriter<d2m::ReserveOp, ttkernel::CBReserveBackOp, ttkernel::CBPushBackOp>,
                ttkernel::D2MDMAWaitRewriter,
                ttkernel::D2MCoreIndexRewriter,

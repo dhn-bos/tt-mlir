@@ -1227,7 +1227,7 @@ void GenericOp::getCanonicalizationPatterns(mlir::RewritePatternSet &patterns,
           blockArg = region.getArgument(dpsIOBoundary);
           assert(blockArg.getNumUses() > 0);
           Operation *popOrReserve = *blockArg.getUsers().begin();
-          if (!mlir::isa<d2m::PopOp, d2m::ReserveOp>(popOrReserve)) {
+          if (!mlir::isa<d2m::WaitOp, d2m::ReserveOp>(popOrReserve)) {
             return false;
           }
 

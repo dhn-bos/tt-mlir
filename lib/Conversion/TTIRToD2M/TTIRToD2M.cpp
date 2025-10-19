@@ -312,7 +312,7 @@ protected:
     for (auto arg : block->getArguments()) {
       Value acquire =
           (arg.getArgNumber() < inputs.size())
-              ? builder.create<d2m::PopOp>(loc, arg).getResult()
+              ? builder.create<d2m::WaitOp>(loc, arg).getResult()
               : builder.create<d2m::ReserveOp>(loc, arg).getResult();
       operands.push_back(acquire);
     }
@@ -1020,7 +1020,7 @@ public:
               2, mlir::utils::IteratorType::parallel);
 
           auto input =
-              builder.create<d2m::PopOp>(bodyLoc, blockArgs[0]).getResult();
+              builder.create<d2m::WaitOp>(bodyLoc, blockArgs[0]).getResult();
           auto output =
               builder.create<d2m::ReserveOp>(bodyLoc, blockArgs[1]).getResult();
 

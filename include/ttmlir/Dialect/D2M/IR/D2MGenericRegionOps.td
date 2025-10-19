@@ -1122,16 +1122,16 @@ class D2M_CBOp<string mnemonic, list<Trait> traits = []> : D2M_GenericRegionOp<m
   }];
 }
 
-def D2M_PopOp : D2M_CBOp<"pop"> {
-  let summary = "Pop from circular buffer.";
+def D2M_WaitOp : D2M_CBOp<"wait"> {
+  let summary = "Wait from circular buffer.";
   let description = [{
-    Pop operation, extracts the enclosing memref from a circular buffer.
+    Wait operation, extracts the enclosing memref from a circular buffer.
     This operation is used by consumer threads to access data from the circular buffer.
     It replaces the d2m.await operation when using the new circular buffer semantics.
 
     Example:
     ```mlir
-    %memref = d2m.pop %cb : !d2m.cb<memref<2x4x!ttcore.tile<32x32, f32>, #l1_>> -> memref<2x4x!ttcore.tile<32x32, f32>, #l1_>
+    %memref = d2m.wait %cb : !d2m.cb<memref<2x4x!ttcore.tile<32x32, f32>, #l1_>> -> memref<2x4x!ttcore.tile<32x32, f32>, #l1_>
     ```
   }];
 }

@@ -541,7 +541,7 @@ void TileUntilizeBlockOp::getEffects(
 }
 
 //===----------------------------------------------------------------------===//
-// YieldOp / PopOp / ReserveOp
+// YieldOp / WaitOp / ReserveOp
 //===----------------------------------------------------------------------===//
 
 mlir::LogicalResult YieldOp::verify() {
