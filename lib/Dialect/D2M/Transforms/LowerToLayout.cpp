@@ -182,10 +182,10 @@ public:
                                              outputCB);
             yield = outputCB;
           } else {
-            // Note: Naturally you'd think to use a WaitOp since this is in input
-            // cb, but in the layout lowering there is no producer thread.  The
-            // ReserveOp here effectively unwraps the CB so the DMA can access
-            // it.
+            // Note: Naturally you'd think to use a WaitOp since this is in
+            // input cb, but in the layout lowering there is no producer thread.
+            // The ReserveOp here effectively unwraps the CB so the DMA can
+            // access it.
             Value inputCB =
                 builder.create<ReserveOp>(loc, blockArgs[0]).getResult();
             dma = builder.create<d2m::DMAOp>(loc, inputCB, viewOutput,

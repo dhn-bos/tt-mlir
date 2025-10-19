@@ -199,7 +199,8 @@ public:
   using OpConversionPattern<memref::SubViewOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(memref::SubViewOp op, typename memref::SubViewOp::Adaptor adaptor,
+  matchAndRewrite(memref::SubViewOp op,
+                  typename memref::SubViewOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     // We have blocked this input. We need to get the indicies for the first
     // tile in the subview.
@@ -217,7 +218,8 @@ public:
     auto resultTy = mlir::cast<MemRefType>(op.getResult().getType());
     Value rtIdx = index(rewriter, op.getLoc(), resultTy.getShape()[0]);
     Value ktIdx = index(rewriter, op.getLoc(), resultTy.getShape()[1]);
-    Value tilesPerBlock = rewriter.create<arith::MulIOp>(op.getLoc(), rtIdx, ktIdx);
+    Value tilesPerBlock =
+        rewriter.create<arith::MulIOp>(op.getLoc(), rtIdx, ktIdx);
 
     // Convert the resolved source row offset to a block-row index.
     Value rowBlockIdx =
@@ -502,11 +504,15 @@ public:
       Value aTileIndex = adaptor.getA();
       Value bTileIndex = adaptor.getB();
 
-      // If the input didn't come from a subview, we'll expect the CB directly which implicitly comes from an unrealized conversion cast.  This is a special case where we're reading from offset 0.
-      if (mlir::isa_and_nonnull<UnrealizedConversionCastOp>(aTileIndex.getDefiningOp())) {
+      // If the input didn't come from a subview, we'll expect the CB directly
+      // which implicitly comes from an unrealized conversion cast.  This is a
+      // special case where we're reading from offset 0.
+      if (mlir::isa_and_nonnull<UnrealizedConversionCastOp>(
+              aTileIndex.getDefiningOp())) {
         aTileIndex = index(rewriter, op.getLoc(), 0);
       }
-      if (mlir::isa_and_nonnull<UnrealizedConversionCastOp>(bTileIndex.getDefiningOp())) {
+      if (mlir::isa_and_nonnull<UnrealizedConversionCastOp>(
+              bTileIndex.getDefiningOp())) {
         bTileIndex = index(rewriter, op.getLoc(), 0);
       }
 

@@ -125,7 +125,7 @@ struct ConvertD2MToTTKernel
       }
 
       if (mlir::isa<StridedLayoutAttr>(memref.getLayout())) {
-        // This memref abstracts index offsets into a subview. 
+        // This memref abstracts index offsets into a subview.
         return IndexType::get(memref.getContext());
       }
 
