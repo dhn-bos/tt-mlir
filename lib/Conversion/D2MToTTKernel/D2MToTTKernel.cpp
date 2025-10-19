@@ -76,44 +76,6 @@ static std::pair<Value, Value> getMcastEndCoords(PatternRewriter &rewriter,
               index(rewriter, loc, 1))};
 }
 
-static Value getTileIndexFromBlockView(RewriterBase &rewriter, Location loc,
-                                       Value inputView) {
-  if (auto subViewOp =
-          mlir::dyn_cast<memref::SubViewOp>(inputView.getDefiningOp())) {
-    // We have blocked this input. We need to get the indicies for the first
-    // tile in the subview.
-    SmallVector<Value> indices = {index(rewriter, loc, 0),
-                                  index(rewriter, loc, 0)};
-    SmallVector<Value> sourceIndices;
-
-    // TODO(#4717): This call alone should be enough to get the tile indices,
-    // but currently it returns block index instead. Once fixed, we can remove
-    // all the other calculations below.
-    affine::resolveIndicesIntoOpWithOffsetsAndStrides(
-        rewriter, loc, subViewOp.getMixedOffsets(), subViewOp.getMixedStrides(),
-        subViewOp.getDroppedDims(), indices, sourceIndices);
-
-    auto resultTy = mlir::cast<MemRefType>(subViewOp.getResult().getType());
-    Value rtIdx = index(rewriter, loc, resultTy.getShape()[0]);
-    Value ktIdx = index(rewriter, loc, resultTy.getShape()[1]);
-    Value tilesPerBlock = rewriter.create<arith::MulIOp>(loc, rtIdx, ktIdx);
-
-    // Convert the resolved source row offset to a block-row index.
-    Value rowBlockIdx =
-        rewriter.create<arith::DivSIOp>(loc, sourceIndices[0], rtIdx);
-    Value rowBase =
-        rewriter.create<arith::MulIOp>(loc, rowBlockIdx, tilesPerBlock);
-    return rewriter.create<arith::AddIOp>(loc, rowBase, sourceIndices[1]);
-  }
-
-  if (mlir::isa<memref::CastOp>(inputView.getDefiningOp())) {
-    // We have not blocked this input. Ignore the cast and start from index 0 of
-    // the input.
-    return index(rewriter, loc, 0);
-  }
-  llvm_unreachable("Expected subview or cast op");
-}
-
 static Value getCB(ConversionPatternRewriter &rewriter, Value cb) {
   if (memref::LoadOp loadOp =
           mlir::dyn_cast<memref::LoadOp>(cb.getDefiningOp());
@@ -226,6 +188,43 @@ public:
   matchAndRewrite(ConcreteOp op, typename ConcreteOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     rewriter.replaceOp(op, adaptor.getOperands());
+    return success();
+  };
+};
+} // namespace
+
+namespace {
+class MemRefSubviewRewriter : public OpConversionPattern<memref::SubViewOp> {
+public:
+  using OpConversionPattern<memref::SubViewOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(memref::SubViewOp op, typename memref::SubViewOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // We have blocked this input. We need to get the indicies for the first
+    // tile in the subview.
+    SmallVector<Value> indices = {index(rewriter, op.getLoc(), 0),
+                                  index(rewriter, op.getLoc(), 0)};
+    SmallVector<Value> sourceIndices;
+
+    // TODO(#4717): This call alone should be enough to get the tile indices,
+    // but currently it returns block index instead. Once fixed, we can remove
+    // all the other calculations below.
+    affine::resolveIndicesIntoOpWithOffsetsAndStrides(
+        rewriter, op.getLoc(), op.getMixedOffsets(), op.getMixedStrides(),
+        op.getDroppedDims(), indices, sourceIndices);
+
+    auto resultTy = mlir::cast<MemRefType>(op.getResult().getType());
+    Value rtIdx = index(rewriter, op.getLoc(), resultTy.getShape()[0]);
+    Value ktIdx = index(rewriter, op.getLoc(), resultTy.getShape()[1]);
+    Value tilesPerBlock = rewriter.create<arith::MulIOp>(op.getLoc(), rtIdx, ktIdx);
+
+    // Convert the resolved source row offset to a block-row index.
+    Value rowBlockIdx =
+        rewriter.create<arith::DivSIOp>(op.getLoc(), sourceIndices[0], rtIdx);
+    Value rowBase =
+        rewriter.create<arith::MulIOp>(op.getLoc(), rowBlockIdx, tilesPerBlock);
+    rewriter.replaceOpWithNewOp<arith::AddIOp>(op, rowBase, sourceIndices[1]);
     return success();
   };
 };
@@ -500,10 +499,9 @@ public:
       // Get the tile index for each input in the global memref. This is done by
       // resolving tile (0,0) from the subview, representing a block, into the
       // address space of the source memref.
-      Value aTileIndex =
-          getTileIndexFromBlockView(rewriter, op->getLoc(), op.getA());
-      Value bTileIndex =
-          getTileIndexFromBlockView(rewriter, op->getLoc(), op.getB());
+      Value aTileIndex = adaptor.getA();
+      Value bTileIndex = adaptor.getB();
+      aTileIndex.dump();
 
       rewriter.create<ttkernel::ExperimentalMatmulBlockOp>(
           op->getLoc(), cbA, cbB, aTileIndex, bTileIndex, destIndex, transpose,
@@ -531,8 +529,8 @@ public:
       }
 
       auto insertionPoint = rewriter.getInsertionPoint();
-      auto cbA = adaptor.getA();
-      auto cbB = adaptor.getB();
+      auto cbA = getCB(rewriter, op.getA());
+      auto cbB = getCB(rewriter, op.getB());
       auto outCB = getOutCB(rewriter, op);
       setInsertionPointAfterOperands(rewriter, {cbA, cbB, outCB},
                                      /*allowHoisting*/ true);
@@ -1436,6 +1434,7 @@ void populateD2MToTTKernelPatterns(
   // clang-format off
   patterns.add<ttkernel::D2MKernelFunctionArgsRewriter,
                ttkernel::PassthroughRewriter<memref::CastOp>,
+               ttkernel::MemRefSubviewRewriter,
 
                // FPU.
                ttkernel::D2MFPUOpsRewriter<d2m::TileMatmulOp>,
