@@ -2190,32 +2190,27 @@ class ScatterToScatterInDimPattern
                       "Please add support for rank promotion if needed.");
     }
 
-    // Repeat along update_window_dims to match update tensor shape.
-    ArrayRef<int32_t> updateWindowDims = op.getUpdateWindowDims();
-    llvm::SmallVector<int64_t> repeatDims(indexShape.size(), 1);
-    bool needsRepeat = false;
+    // If shapes already match, no broadcast needed
+    if (indexShape == updateShape) {
+      return indexTensor;
+    }
 
-    // For each update_window_dim, set repeat factor to match update tensor
-    // size.
-    for (auto dimAttr : updateWindowDims) {
-      int64_t dim = dimAttr;
-      if (indexShape[dim] != updateShape[dim]) {
+    // Broadcast indices to match updates shape
+    // Calculate repeat dimensions
+    llvm::SmallVector<int64_t> repeatDims(indexShape.size(), 1);
+    for (size_t dim = 0; dim < indexShape.size(); ++dim) {
+      if (indexShape[dim] == 1 && updateShape[dim] > 1) {
         repeatDims[dim] = updateShape[dim];
-        needsRepeat = true;
       }
     }
 
-    if (needsRepeat) {
-      llvm::SmallVector<int64_t> targetIndexShape(updateShape.begin(),
-                                                  updateShape.end());
-      RankedTensorType targetIndexType =
-          RankedTensorType::get(targetIndexShape, indexType.getElementType(),
-                                indexType.getEncoding());
-      auto repeatDimsAttr = rewriter.getDenseI64ArrayAttr(repeatDims);
+    // Create the broadcast/repeat operation
+    RankedTensorType targetIndexType = RankedTensorType::get(
+        updateShape, indexType.getElementType(), indexType.getEncoding());
+    auto repeatDimsAttr = rewriter.getDenseI64ArrayAttr(repeatDims);
 
-      indexTensor = ttir::utils::createDPSOp<ttir::RepeatOp>(
-          rewriter, op.getLoc(), targetIndexType, indexTensor, repeatDimsAttr);
-    }
+    indexTensor = ttir::utils::createDPSOp<ttir::RepeatOp>(
+        rewriter, op.getLoc(), targetIndexType, indexTensor, repeatDimsAttr);
 
     return indexTensor;
   }
