@@ -86,6 +86,10 @@ public:
 
       bool linalgToAffineFailed = false;
       block.walk([&](linalg::GenericOp linalgGenericOp) {
+        llvm::errs() << "DEBUG: Processing linalg::GenericOp (Inputs: "
+                     << linalgGenericOp.getInputs().size()
+                     << ", Outputs: " << linalgGenericOp.getOutputs().size()
+                     << ")\n";
         if (!useTileMatmul && hasTileMatmul(linalgGenericOp)) {
           linalgToAffineFailed |= rewriteTileMatmulAsTileMatmulBlock(
               rewriter, op, region, linalgGenericOp, dstCapacity, modified,
@@ -276,23 +280,14 @@ public:
     // DstSliceAllocationState dstSliceAllocationState;
     DstRegisterAllocation dstRegisterAllocation;
 
-    // Get the DST slice indices from the analysis - use the first entry for now
-    // SmallVector<int> dstSliceIndices;
-    // if (!analysis.genericOpMap.empty()) {
-    //   // For now, just use the first generic op's indices
-    //   dstSliceIndices =
-    //   analysis.genericOpMap.begin()->second.dstSliceIndices; llvm::errs() <<
-    //   "DEBUG: Using DST slice indices from analysis: "; for (int idx :
-    //   dstSliceIndices) {
-    //     llvm::errs() << idx << " ";
-    //   }
-    //   llvm::errs() << "\n";
-    // }
-
     size_t dstSliceIdxCounter = 0;
     region.walk([&](OperandLoadStoreRegisterOpInterface computeOp) {
       llvm::errs() << "DEBUG: Processing compute op #" << dstSliceIdxCounter
-                   << " (available indices: " << dstSliceIndices.size()
+                   << " (Op: " << computeOp->getName().getStringRef()
+                   << ", Operands: " << computeOp->getNumOperands()
+                   << ", Users: "
+                   << std::distance(computeOp->user_begin(),
+                                    computeOp->user_end())
                    << ")\n";
       // We're generating loads and stores for dst, so we can ignore loads and
       // stores that are already on dst.
@@ -507,6 +502,8 @@ public:
       llvm::errs()
           << "DEBUG (TileMatmul): Found linalgGenericOp in analysis map\n"
           << "  maxDstUsage: " << maxDstUsage << "\n"
+          << "  Input count: " << linalgGenericOp.getInputs().size() << "\n"
+          << "  Output count: " << linalgGenericOp.getOutputs().size() << "\n"
           << "  dstSliceIndices: ";
       for (int idx : dstSliceIndices) {
         llvm::errs() << idx << " ";

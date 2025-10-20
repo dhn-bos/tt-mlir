@@ -127,20 +127,11 @@ struct D2MGenericComputeRewriter : public OpRewritePattern<linalg::GenericOp> {
     auto outputTensor =
         mlir::cast<MemRefType>(op.getOutputs().front().getType());
 
-    llvm::errs() << "\n[D2MGenericComputeRewriter] Processing GenericOp\n";
-    llvm::errs() << "  Output shape: ";
-    for (auto dim : outputTensor.getShape()) {
-      llvm::errs() << dim << " ";
-    }
-    llvm::errs() << "\n";
-
     // Calculate DST capacity to determine if we can optimize subblocking.
     Type largestDstType = utils::getRegionLargestDstElemType(op.getRegion());
     const unsigned dstCapacity =
         ttcore::getOpChipDescAttr(op).getDstLogicalSizeTiles(
             largestDstType, false, maxDstPhysicalSizeTiles);
-
-    llvm::errs() << "  DST capacity: " << dstCapacity << "\n";
 
     // Get max DST usage for this GenericOp from the analysis using the current
     // index
@@ -149,8 +140,6 @@ struct D2MGenericComputeRewriter : public OpRewritePattern<linalg::GenericOp> {
       maxDstUsage =
           analysis->dstRegisterInfoList[genericOpIndexRef].dstMaxUsage;
     }
-
-    llvm::errs() << "  Max DST usage from analysis: " << maxDstUsage << "\n";
 
     // Increment index for the next generic op
     genericOpIndexRef++;
@@ -176,7 +165,6 @@ struct D2MGenericComputeRewriter : public OpRewritePattern<linalg::GenericOp> {
     // analysis pass or does it have to be done in runtime, or do we pad.
     if (optimizeSubblocking &&
         outputTensor.getShape()[0] % subblockFactor == 0) {
-      llvm::errs() << "  Subblocking ENABLED:\n";
       // Calculate output subblock shape based on subblockFactor.
       // First dimension is capped at the actual output shape.
       int64_t dim0 = std::min(static_cast<int64_t>(subblockFactor),
@@ -228,20 +216,6 @@ public:
 
     // Run the analysis once before any pattern rewriting
     DestRegisterAnalysis &analysis = getAnalysis<DestRegisterAnalysis>();
-
-    // Print debug information for each generic op's compute map.
-    llvm::errs() << "\n=== DestRegisterAnalysis Results ===\n";
-    for (size_t i = 0; i < analysis.dstRegisterInfoList.size(); ++i) {
-      const auto &dstInfo = analysis.dstRegisterInfoList[i];
-      llvm::errs() << "GenericOp #" << i
-                   << " (max DST usage: " << dstInfo.dstMaxUsage
-                   << ")\n  DST Slice Indices: ";
-      for (int idx : dstInfo.dstSliceIndices) {
-        llvm::errs() << idx << " ";
-      }
-      llvm::errs() << "\n";
-    }
-    llvm::errs() << "====================================\n\n";
 
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
