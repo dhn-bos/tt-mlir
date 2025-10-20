@@ -203,8 +203,8 @@ public:
     const int64_t volume = ttmlir::utils::volume(cbType.getShape());
     TT_assert(volume <= dstCapacity);
     const int64_t numDstSlices = dstCapacity / volume;
-    // TT_assertv(maxDstSliceIdx < numDstSlices,
-    //  "Insufficient DST capacity for all operands.");
+    TT_assertv(maxDstSliceIdx < numDstSlices,
+               "Insufficient DST capacity for all operands.");
     SmallVector<int64_t> dstShape({numDstSlices});
     dstShape.append(cbType.getShape().begin(), cbType.getShape().end());
     MemRefType dstType =
@@ -272,16 +272,12 @@ public:
 
       // Collect stores from this op.
       for (auto *user : computeOp->getUsers()) {
+        int64_t dstSliceIndex = dstSliceIndices[dstSliceIdxCounter];
         if (auto potentialStore = mlir::dyn_cast<affine::AffineStoreOp>(user);
             notDstMemspace(potentialStore)) {
-
-          // int64_t dstSliceIndex = dstSliceIndices[dstSliceIndices.size() -
-          // 1];
-          int64_t dstSliceIndex = dstSliceIndices[dstSliceIdxCounter];
           collectDstAccess<affine::AffineStoreOp>(op, potentialStore, copyInfos,
                                                   dstSliceIndex,
                                                   outermostInnerComputeLoop);
-
         }
         // If the user isn't a store, it must be another compute consumer and we
         // need to set or allocate a dest register intermediate for it.
@@ -293,8 +289,7 @@ public:
           assert(computeOp->getNumResults() == 1);
           assert(!dstRegisterAllocation.contains(computeOp));
 
-          int32_t allocatedIndex = dstSliceIndices[dstSliceIdxCounter];
-          dstRegisterAllocation[computeOp] = {allocatedIndex,
+          dstRegisterAllocation[computeOp] = {dstSliceIndex,
                                               outermostInnerComputeLoop};
         }
       }
