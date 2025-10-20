@@ -779,9 +779,6 @@ public:
     // Retrieve the cached analysis from the pass manager instead of recomputing
     auto analysisMaybe = getCachedAnalysis<DestRegisterAnalysis>();
     if (!analysisMaybe.has_value()) {
-      llvm::errs() << "ERROR: DestRegisterAnalysis not cached! "
-                   << "GenericTileComputeLoops pass must run before "
-                   << "InsertDstRegisterAccess.\n";
       return signalPassFailure();
     }
     DestRegisterAnalysis &analysis = analysisMaybe.value().get();
