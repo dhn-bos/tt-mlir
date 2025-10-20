@@ -1,6 +1,6 @@
 include(ExternalProject)
 
-set(TT_METAL_VERSION "sshon/re-shard")
+set(TT_METAL_VERSION "0b225ef900a4458fa43cedfca9370d5d3e26778a")
 
 set(CMAKE_INSTALL_MESSAGE LAZY)  # suppress "Up-to-date:..." messages in incremental builds
 

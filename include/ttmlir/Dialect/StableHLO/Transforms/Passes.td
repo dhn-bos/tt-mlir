@@ -124,6 +124,32 @@ def AnalyzeMeshPass : Pass<"analyze-mesh", "::mlir::ModuleOp">
   ];
 }
 
+def AggressivePropagationWrapperPass
+    : Pass<"aggressive-propagation-wrapper", "::mlir::ModuleOp">
+{
+  let summary = "Wrapper around AggressivePropagationPass that compares shard status before and after.";
+  let description = [{
+    This pass wraps the Shardy AggressivePropagationPass and compares the argument shard statuses
+    before and after execution. If an argument was previously marked as presharded but the pass
+    modifies its sharding, this wrapper resets its shard status from presharded to unsharded so
+    that it can be re-sharded correctly downstream.
+
+    The pass does not modify AggressivePropagationPass itself — instead, it runs the pass
+    internally within this wrapper and applies adjustments after comparison.
+
+    Example:
+    ```mlir
+    ```
+    }];
+
+
+  let dependentDialects = [
+    "::mlir::sdy::SdyDialect",
+    "::mlir::tt::ttcore::TTCoreDialect",
+    "::mlir::func::FuncDialect"
+  ];
+}
+
 def WrapUnderManualComputationPass : Pass<"wrap-under-manual-computation", "::mlir::ModuleOp">
 {
   let summary = "Wrap all operations within a sdy manual computation op.";

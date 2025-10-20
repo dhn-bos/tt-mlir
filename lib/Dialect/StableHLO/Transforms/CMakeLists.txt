@@ -1,4 +1,5 @@
 add_mlir_dialect_library(MLIRStableHLOTransforms
+  AggressivePropagationWrapperPass.cpp
   AnalyzeMesh.cpp
   ApplyArgumentShardStatus.cpp
   ConvertXlaSdyToSdy.cpp

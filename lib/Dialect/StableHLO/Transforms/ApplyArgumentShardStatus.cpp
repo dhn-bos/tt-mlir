@@ -38,19 +38,7 @@ static mlir::LogicalResult updateShardStatus(MLIRContext *context,
           llvm::SmallVector<mlir::NamedAttribute>(argAttrDict.getValue());
 
       if (argAttrDict.contains(annotationsKeyWord)) {
-        bool isReplicated = false;
-        if (!shardyAnnotationsExist) {
-          if (auto shardingStr = llvm::cast<mlir::StringAttr>(
-                  argAttrDict.get(annotationsKeyWord))) {
-            isReplicated = (shardingStr.getValue() == "{replicated}");
-          }
-        }
-        if (isReplicated) {
-          // If the sharding is replicated, we consider it unsharded.
-          shardStatus = mlir::tt::ttcore::ShardStatus::Unsharded;
-        } else {
-          shardStatus = mlir::tt::ttcore::ShardStatus::Presharded;
-        }
+        shardStatus = mlir::tt::ttcore::ShardStatus::Presharded;
       }
     }
 

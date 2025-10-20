@@ -10,6 +10,7 @@
 #include "tt/runtime/detail/ttnn/operations/utils.h"
 #include "tt/runtime/detail/ttnn/utils.h"
 #include "ttnn/operations/ccl/ccl_host_types.hpp"
+#include "ttnn/operations/ccl/reduce_scatter/reduce_scatter.hpp"
 #include "ttnn/operations/experimental/ccl/reduce_scatter_async/reduce_scatter.hpp"
 #include "ttnn/operations/experimental/ccl/reduce_scatter_minimal_async/reduce_scatter_minimal_async.hpp"
 
@@ -26,8 +27,8 @@ void run(const ::tt::target::ttnn::ReduceScatterOp *op,
   int32_t scatterDimension = op->scatter_dim();
   uint32_t clusterAxis = op->cluster_axis();
   uint32_t numLinks = op->num_links();
-  //   auto reduceType =
-  //       ::tt::runtime::ttnn::utils::getReduceType(op->reduce_type());
+  // auto reduceType =
+  //     ::tt::runtime::ttnn::utils::getReduceType(op->reduce_type());
   // TODO(hkwon): Enable reduce_type again once the issue is resolved.
   // Currently the reduce_type argument is commented out because
   // reduce_scatter_minimal_async does not accept it.
@@ -42,28 +43,14 @@ void run(const ::tt::target::ttnn::ReduceScatterOp *op,
   LOG_ASSERT(outputMemoryConfig.has_value(),
              "Memory config must exist for device tensors");
 
-  ::ttnn::MeshDevice &meshDevice = context.getMeshDevice();
+  //   ::ttnn::MeshDevice &meshDevice = context.getMeshDevice();
 
-  // NOTE: The caller is currently responsible for creating/passing semaphores.
-  // TODO(hkwon): Remove semaphore creation here once
-  // reduce_scatter_minimal_async manages semaphores internally. Tracking:
-  // https://github.com/tenstorrent/tt-metal/issues/26952
-  std::vector<::ttnn::GlobalSemaphore> semaphores;
-  // reduce_scatter_minimal_async currently requires 3 semaphores.
-  // See: https://github.com/tenstorrent/tt-metal/issues/25212 for details.
-  for (int i = 0; i < 3; i++) {
-    semaphores.push_back(::ttnn::global_semaphore::create_global_semaphore(
-        &meshDevice,
-        meshDevice.worker_cores(::tt::tt_metal::HalProgrammableCoreType::TENSIX,
-                                tt::tt_metal::SubDeviceId{0}),
-        0, tt::tt_metal::BufferType::L1));
+  ::ttnn::Tensor out;
+  {
+    out = ::ttnn::reduce_scatter(input, scatterDimension, clusterAxis,
+                                 std::nullopt, std::nullopt, std::nullopt,
+                                 numLinks, ::ttnn::ccl::Topology::Linear);
   }
-  ::ttnn::Tensor out = ::ttnn::experimental::reduce_scatter_minimal_async(
-      input, /*persistent_output_buffers=*/std::nullopt, scatterDimension,
-      semaphores, /*barrier_semaphore=*/std::nullopt, numLinks,
-      outputMemoryConfig.value(), /*intermediate_memory_config=*/std::nullopt,
-      ::ttnn::ccl::Topology::Linear, /*subdevice_id=*/std::nullopt,
-      clusterAxis);
   tensorPool.insertTTNNTensorAndValidate(op->out(), out);
 }
 } // namespace tt::runtime::ttnn::operations::ccl
