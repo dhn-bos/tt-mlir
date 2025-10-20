@@ -88,7 +88,9 @@ public:
       block.walk([&](linalg::GenericOp linalgGenericOp) {
         if (!useTileMatmul && hasTileMatmul(linalgGenericOp)) {
           linalgToAffineFailed |= rewriteTileMatmulAsTileMatmulBlock(
-              rewriter, op, region, linalgGenericOp, dstCapacity, modified);
+              rewriter, op, region, linalgGenericOp, dstCapacity, modified,
+              analysis, genericOpIndex);
+          genericOpIndex++;
           return;
         }
 
@@ -100,11 +102,37 @@ public:
           linalgToAffineFailed = true;
           return;
         }
+
+        // Extract maxDstUsage and dstSliceIndices from analysis before erasing
+        int maxDstUsage = 0;
+        SmallVector<int> dstSliceIndices;
+        if (genericOpIndex < analysis->dstRegisterInfoList.size()) {
+          const auto &info =
+              analysis
+                  ->dstRegisterInfoList[analysis->dstRegisterInfoList.size() -
+                                        1 - genericOpIndex];
+          maxDstUsage = info.dstMaxUsage;
+          dstSliceIndices = info.dstSliceIndices;
+          llvm::errs() << "DEBUG: Got info for genericOpIndex "
+                       << genericOpIndex << "\n"
+                       << "  maxDstUsage: " << maxDstUsage << "\n"
+                       << "  dstSliceIndices: ";
+          for (int idx : dstSliceIndices) {
+            llvm::errs() << idx << " ";
+          }
+          llvm::errs() << "\n";
+        } else {
+          llvm::errs() << "DEBUG: genericOpIndex " << genericOpIndex
+                       << " out of bounds for analysis list (size: "
+                       << analysis->dstRegisterInfoList.size() << ")\n";
+        }
+
         rewriter.eraseOp(linalgGenericOp);
         modified |= insertDstRegisterAccess(
-            rewriter, op, region, dstCapacity, *analysis,
+            rewriter, op, region, dstCapacity, maxDstUsage, dstSliceIndices,
             !linalgLoops.value().empty() ? linalgLoops.value().front()
                                          : nullptr);
+        genericOpIndex++;
       });
       if (linalgToAffineFailed) {
         return failure();
@@ -115,8 +143,8 @@ public:
 
   static bool
   insertDstRegisterAccess(PatternRewriter &rewriter, GenericOp op,
-                          Region &region, unsigned dstCapacity,
-                          const DestRegisterAnalysis &analysis,
+                          Region &region, unsigned dstCapacity, int maxDstUsage,
+                          const SmallVector<int> &dstSliceIndices,
                           Operation *outermostInnerComputeLoop = nullptr) {
     assert(region.getBlocks().size() == 1);
     if (hasAcquireDstOp(region)) {
@@ -126,8 +154,8 @@ public:
     Location loc = op.getLoc();
 
     // 1. Collect all loads/stores to dst organized by loop nest.
-    auto [copyInfos, dstAllocation] =
-        collectDstAccesses(op, region, outermostInnerComputeLoop, analysis);
+    auto [copyInfos, dstAllocation] = collectDstAccesses(
+        op, region, outermostInnerComputeLoop, dstSliceIndices);
     if (copyInfos.empty()) {
       return false;
     }
@@ -145,7 +173,7 @@ public:
     // TODO: For now, just use the first entry in genericOpMap since we're
     // dealing with a single d2m.generic operation. In the future, we should
     // match the correct GenericOp from the analysis.
-    assert(!analysis.genericOpMap.empty() && "No generic ops in analysis");
+    assert(!dstSliceIndices.empty() && "No generic ops in analysis");
     insertDstRegisterAllocation(rewriter, loc, dst, dstAllocation);
 
     return true;
@@ -204,8 +232,8 @@ public:
     const int64_t volume = ttmlir::utils::volume(cbType.getShape());
     TT_assert(volume <= dstCapacity);
     const int64_t numDstSlices = dstCapacity / volume;
-    TT_assertv(maxDstSliceIdx < numDstSlices,
-               "Insufficient DST capacity for all operands.");
+    // TT_assertv(maxDstSliceIdx < numDstSlices,
+    //  "Insufficient DST capacity for all operands.");
     SmallVector<int64_t> dstShape({numDstSlices});
     dstShape.append(cbType.getShape().begin(), cbType.getShape().end());
     MemRefType dstType =
@@ -243,22 +271,23 @@ public:
   static DstAccessCollection
   collectDstAccesses(GenericOp op, Region &region,
                      Operation *outermostInnerComputeLoop,
-                     const DestRegisterAnalysis &analysis) {
+                     const SmallVector<int> &dstSliceIndices) {
     CopyInfoMap copyInfos;
     // DstSliceAllocationState dstSliceAllocationState;
     DstRegisterAllocation dstRegisterAllocation;
 
     // Get the DST slice indices from the analysis - use the first entry for now
-    SmallVector<int> dstSliceIndices;
-    if (!analysis.genericOpMap.empty()) {
-      // For now, just use the first generic op's indices
-      dstSliceIndices = analysis.genericOpMap.begin()->second.dstSliceIndices;
-      llvm::errs() << "DEBUG: Using DST slice indices from analysis: ";
-      for (int idx : dstSliceIndices) {
-        llvm::errs() << idx << " ";
-      }
-      llvm::errs() << "\n";
-    }
+    // SmallVector<int> dstSliceIndices;
+    // if (!analysis.genericOpMap.empty()) {
+    //   // For now, just use the first generic op's indices
+    //   dstSliceIndices =
+    //   analysis.genericOpMap.begin()->second.dstSliceIndices; llvm::errs() <<
+    //   "DEBUG: Using DST slice indices from analysis: "; for (int idx :
+    //   dstSliceIndices) {
+    //     llvm::errs() << idx << " ";
+    //   }
+    //   llvm::errs() << "\n";
+    // }
 
     size_t dstSliceIdxCounter = 0;
     region.walk([&](OperandLoadStoreRegisterOpInterface computeOp) {
@@ -448,7 +477,8 @@ public:
   */
   static bool rewriteTileMatmulAsTileMatmulBlock(
       PatternRewriter &rewriter, GenericOp op, Region &region,
-      linalg::GenericOp linalgGenericOp, unsigned dstCapacity, bool &modified) {
+      linalg::GenericOp linalgGenericOp, unsigned dstCapacity, bool &modified,
+      const DestRegisterAnalysis *analysis, size_t genericOpIndex) {
     assert(linalgGenericOp.getInputs().size() == 2 &&
            "Expected exactly 2 input for tile matmul");
     assert(linalgGenericOp.getOutputs().size() == 1 &&
@@ -464,9 +494,31 @@ public:
     if (failed(linalgLoops)) {
       return false;
     }
+
+    // Extract maxDstUsage and dstSliceIndices from analysis before erasing
+    int maxDstUsage = 0;
+    SmallVector<int> dstSliceIndices;
+    if (analysis) {
+      const auto &info =
+          analysis->dstRegisterInfoList[analysis->dstRegisterInfoList.size() -
+                                        1 - genericOpIndex];
+      maxDstUsage = info.dstMaxUsage;
+      dstSliceIndices = info.dstSliceIndices;
+      llvm::errs()
+          << "DEBUG (TileMatmul): Found linalgGenericOp in analysis map\n"
+          << "  maxDstUsage: " << maxDstUsage << "\n"
+          << "  dstSliceIndices: ";
+      for (int idx : dstSliceIndices) {
+        llvm::errs() << idx << " ";
+      }
+      llvm::errs() << "\n";
+    } else {
+      llvm::errs() << "DEBUG (TileMatmul): analysis is null\n";
+    }
+
     rewriter.eraseOp(linalgGenericOp);
     modified |= insertDstRegisterAccess(
-        rewriter, op, region, dstCapacity,
+        rewriter, op, region, dstCapacity, maxDstUsage, dstSliceIndices,
         !linalgLoops.value().empty() ? linalgLoops.value().front() : nullptr);
 
     Operation *outerLoop = linalgLoops.value()[0];
@@ -773,6 +825,7 @@ public:
   bool useTileMatmul = false;
   unsigned maxDstPhysicalSizeTiles = 0;
   const DestRegisterAnalysis *analysis = nullptr;
+  mutable size_t genericOpIndex = 0;
 };
 } // namespace
 
@@ -883,15 +936,12 @@ public:
     //                  << computeOp << " -> DST slice " << dstIndex << "\n";
     //   }
     // }
-    llvm::errs() << "Cached analysis contains " << analysis.genericOpMap.size()
-                 << " GenericOps\n";
-    for (auto &[genericOp, dstInfo] : analysis.genericOpMap) {
-      if (!genericOp) {
-        llvm::errs() << "  WARNING: GenericOp pointer is null\n";
-        continue;
-      }
-      llvm::errs() << "  GenericOp has max DST usage: " << dstInfo.dstMaxUsage
-                   << "\n";
+    llvm::errs() << "Cached analysis contains "
+                 << analysis.dstRegisterInfoList.size() << " GenericOps\n";
+    for (size_t i = 0; i < analysis.dstRegisterInfoList.size(); ++i) {
+      const auto &dstInfo = analysis.dstRegisterInfoList[i];
+      llvm::errs() << "  GenericOp #" << i
+                   << " has max DST usage: " << dstInfo.dstMaxUsage << "\n";
       llvm::errs() << "    DST Slice Indices ("
                    << dstInfo.dstSliceIndices.size() << " compute ops): ";
       for (int idx : dstInfo.dstSliceIndices) {

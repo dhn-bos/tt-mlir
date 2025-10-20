@@ -88,7 +88,7 @@ DestRegisterAnalysis::DestRegisterAnalysis(Operation *op) {
     });
 
     info.dstMaxUsage = std::max(info.dstMaxUsage, nextAvailableIndex);
-    genericOpMap[genericOp] = info;
+    dstRegisterInfoList.push_back(info);
   });
 }
 

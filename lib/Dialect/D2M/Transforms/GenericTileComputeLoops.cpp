@@ -113,9 +113,11 @@ namespace {
 struct D2MGenericComputeRewriter : public OpRewritePattern<linalg::GenericOp> {
   D2MGenericComputeRewriter(MLIRContext *context,
                             unsigned maxDstPhysicalSizeTiles,
-                            const DestRegisterAnalysis *analysis)
+                            const DestRegisterAnalysis *analysis,
+                            size_t &genericOpIndexRef)
       : OpRewritePattern<linalg::GenericOp>(context),
-        maxDstPhysicalSizeTiles(maxDstPhysicalSizeTiles), analysis(analysis) {}
+        maxDstPhysicalSizeTiles(maxDstPhysicalSizeTiles), analysis(analysis),
+        genericOpIndexRef(genericOpIndexRef) {}
 
   LogicalResult matchAndRewrite(linalg::GenericOp op,
                                 PatternRewriter &rewriter) const final {
@@ -140,10 +142,18 @@ struct D2MGenericComputeRewriter : public OpRewritePattern<linalg::GenericOp> {
 
     llvm::errs() << "  DST capacity: " << dstCapacity << "\n";
 
-    // Get max DST usage for this GenericOp from the analysis.
-    int maxDstUsage = analysis->getDstMaxUsage(op);
+    // Get max DST usage for this GenericOp from the analysis using the current
+    // index
+    int maxDstUsage = 0;
+    if (genericOpIndexRef < analysis->dstRegisterInfoList.size()) {
+      maxDstUsage =
+          analysis->dstRegisterInfoList[genericOpIndexRef].dstMaxUsage;
+    }
 
     llvm::errs() << "  Max DST usage from analysis: " << maxDstUsage << "\n";
+
+    // Increment index for the next generic op
+    genericOpIndexRef++;
 
     // Enable subblocking optimization if DST can hold multiple copies of the
     // usage pattern. For example, if dstCapacity = 8 and maxDstUsage = 3, we
@@ -203,6 +213,7 @@ struct D2MGenericComputeRewriter : public OpRewritePattern<linalg::GenericOp> {
 
   unsigned maxDstPhysicalSizeTiles = 0;
   const DestRegisterAnalysis *analysis;
+  size_t &genericOpIndexRef;
 };
 } // namespace
 
@@ -220,9 +231,11 @@ public:
 
     // Print debug information for each generic op's compute map.
     llvm::errs() << "\n=== DestRegisterAnalysis Results ===\n";
-    for (auto &[genericOp, dstInfo] : analysis.genericOpMap) {
-      llvm::errs() << "GenericOp: " << genericOp->getName().getStringRef()
-                   << " (max DST usage: " << dstInfo.dstMaxUsage << ")\n";
+    for (size_t i = 0; i < analysis.dstRegisterInfoList.size(); ++i) {
+      const auto &dstInfo = analysis.dstRegisterInfoList[i];
+      llvm::errs() << "GenericOp #" << i
+                   << " (max DST usage: " << dstInfo.dstMaxUsage
+                   << ")\n  DST Slice Indices: ";
       for (int idx : dstInfo.dstSliceIndices) {
         llvm::errs() << idx << " ";
       }
@@ -232,8 +245,9 @@ public:
 
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
+    size_t genericOpIndex = 0;
     patterns.add<D2MGenericComputeRewriter>(
-        ctx, maxDstPhysicalSizeTiles.getValue(), &analysis);
+        ctx, maxDstPhysicalSizeTiles.getValue(), &analysis, genericOpIndex);
     walkAndApplyPatterns(getOperation(), std::move(patterns));
 
     // Mark the analysis as preserved for use by downstream passes
