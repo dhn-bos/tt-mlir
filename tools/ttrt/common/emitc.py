@@ -313,7 +313,7 @@ class EmitC:
                     signal.signal(signal.SIGINT, signal_handler)
                     signal.signal(signal.SIGTERM, signal_handler)
                     testProcess.communicate()
-
+                print("1")
                 # Open a device of default shape
                 dispatch_core_type = ttrt.runtime.DispatchCoreType.ETH
 
@@ -328,13 +328,15 @@ class EmitC:
                     # Open a device of shape (x,y), where (x,y) is the mesh shape supplied by the flatbuffer
                     fb_mesh_shape = bin.get_program(0).mesh_shape
                     mesh_options.mesh_shape = fb_mesh_shape
-
+                print("2")
                 device = ttrt.runtime.open_mesh_device(mesh_options)
+                print("3")
 
                 # Run to EmitC
                 program_names = ttrt.runtime.test.get_so_programs(
                     emitc_dylib_handle, dylib.file_path
                 )
+                print("4")
 
                 self.logging.debug(f"Program names found: {program_names}")
 
@@ -356,6 +358,7 @@ class EmitC:
                         "device_output",
                         fbb_run_directory,
                     )
+                    print("5")
 
                 for program_index, program_name in enumerate(program_names):
                     if self["--program-index"] != "all" and program_index != int(
@@ -366,6 +369,7 @@ class EmitC:
                         f"evaluating program={program_name} for file={dylib.file_path}"
                     )
                     emitc_artifact_path = f"{self.artifacts.get_emitc_dylib_folder_path(dylib)}/program_{program_index}"
+                    print("6")
 
                     if compare_to_ttnn:
                         fbb_runtime_inputs = []
@@ -389,6 +393,7 @@ class EmitC:
                                 )
 
                         # pre-upload inputs
+                        print("7")
                         emitc_runtime_inputs = convert_input_layouts(
                             device,
                             fbb_runtime_inputs,
@@ -396,17 +401,18 @@ class EmitC:
                             program_index,
                         )
                     else:
+                        print("8")
                         emitc_runtime_inputs = ttrt.runtime.test.create_inputs(
                             emitc_dylib_handle,
                             program_name,
                             device,
                             dylib.file_path,
                         )
+                        print("9")
                         emitc_torch_inputs = []
                         if (
                             self["--save-artifacts"]
                             or self["--print-input-output-tensors"]
-                            or compare_to_ttnn
                         ):
                             for i, emitc_runtime_input in enumerate(
                                 emitc_runtime_inputs
@@ -415,6 +421,7 @@ class EmitC:
                                     emitc_runtime_input
                                 )
                                 emitc_torch_inputs.append(emitc_torch_input)
+                                print("1")
 
                                 if self["--save-artifacts"]:
                                     self.artifacts.save_torch_tensor(
@@ -429,16 +436,19 @@ class EmitC:
                                     )
 
                     for loop in range(self["--loops"]):
+                        print("10")
                         emitc_runtime_outputs = ttrt.runtime.test.run_so_program(
                             emitc_dylib_handle,
                             program_name,
                             emitc_runtime_inputs,
                             device,
                         )
+                        print("11")
                         emitc_runtime_outputs = [
                             ttrt.runtime.to_host(emitc_out, untilize=True)[0]
                             for emitc_out in emitc_runtime_outputs
                         ]
+                        print("12")
 
                     emitc_torch_outputs = []
                     if (
@@ -450,6 +460,7 @@ class EmitC:
                             emitc_torch_output = convert_runtime_to_torch_tensor(
                                 emitc_runtime_output
                             )
+                            print("13")
                             emitc_torch_outputs.append(emitc_torch_output)
 
                             if self["--save-artifacts"]:
@@ -465,6 +476,7 @@ class EmitC:
                                 )
 
                         if compare_to_ttnn:
+                            print("14")
                             fbb_runtime_outputs = []
                             for fbb_torch_output in fbb_torch_outputs[
                                 "program_" + str(program_index)
@@ -475,10 +487,12 @@ class EmitC:
                             self.logging.debug(
                                 f"got emitc outputs for program_index={program_index}, loop={loop}"
                             )
+                            print("15")
 
                             all_tensors_match = ttrt.runtime.test.compare_outs(
                                 fbb_runtime_outputs, emitc_runtime_outputs
                             )
+                            print("16")
 
                             if not all_tensors_match:
                                 self.logging.error(
@@ -514,11 +528,15 @@ class EmitC:
                 continue
             finally:
                 # Only close the device it if was opened
+                print("17")
                 if device is not None:
+                    print("18")
                     ttrt.runtime.close_mesh_device(device)
+                    print("19")
                     device = None
-
+                print("20")
                 ttrt.runtime.test.close_so(emitc_dylib_handle)
+                print("21")
 
         self.logging.debug(f"finished executing emitc_dylibs")
 
