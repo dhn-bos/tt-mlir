@@ -63,7 +63,7 @@ module {
       // CHECK: affine.store %[[INIT_VAL]], %[[DST]][0, %[[INIT_I]], %[[INIT_J]]] : memref<8x1x1x!ttcore.tile<32x32, f16>, #dst>
 
       // Check matmul operation uses values from correct memory spaces
-      // CHECK: "d2m.tile_matmul_block"
+      // CHECK: "d2m.tile_matmul_block"(%{{.*}}, %{{.*}}, %{{.*}}) : (memref<{{.*}}, strided<[3, 1], offset: ?>, #l1>, memref<{{.*}}, strided<[2, 1], offset: ?>, #l1>, memref<{{.*}}, strided<[2, 1], offset: ?>, #l1>) -> ()
       %c0 = arith.constant 0 : index
       %c3_10 = arith.constant 3 : index
       %c3_11 = arith.constant 3 : index
