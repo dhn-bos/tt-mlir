@@ -43,6 +43,8 @@ DestRegisterAnalysis::DestRegisterAnalysis(Operation *op) {
     for (Value input : inputValues) {
       int inputIndex = nextAvailableIndex++;
       valueToDstIndex[input] = inputIndex;
+      // Record input indices for DST allocation
+      info.dstSliceIndices.push_back(inputIndex);
     }
 
     // Phase 3: Process compute ops.

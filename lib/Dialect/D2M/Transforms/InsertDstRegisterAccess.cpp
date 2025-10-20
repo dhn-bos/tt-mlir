@@ -54,18 +54,18 @@ public:
   };
   using CopyInfoMap = DenseMap<Operation *, CopyInfo>;
 
-  class DstSliceAllocationState {
-  public:
-    int64_t allocate() { return nextSliceIndex++; }
+  // class DstSliceAllocationState {
+  // public:
+  //   int64_t allocate() { return nextSliceIndex++; }
 
-    void setStoreToDst() { storedToDst = true; }
-    bool didStoreToDst() { return storedToDst; }
-    int64_t getCurrSliceIndex() { return nextSliceIndex - 1; }
+  //   void setStoreToDst() { storedToDst = true; }
+  //   bool didStoreToDst() { return storedToDst; }
+  //   int64_t getCurrSliceIndex() { return nextSliceIndex - 1; }
 
-  private:
-    int64_t nextSliceIndex = 0;
-    bool storedToDst = false;
-  };
+  // private:
+  //   int64_t nextSliceIndex = 0;
+  //   bool storedToDst = false;
+  // };
 
   LogicalResult matchAndRewrite(GenericOp op,
                                 PatternRewriter &rewriter) const final {
@@ -245,7 +245,7 @@ public:
                      Operation *outermostInnerComputeLoop,
                      const DestRegisterAnalysis &analysis) {
     CopyInfoMap copyInfos;
-    DstSliceAllocationState dstSliceAllocationState;
+    // DstSliceAllocationState dstSliceAllocationState;
     DstRegisterAllocation dstRegisterAllocation;
 
     // Get the DST slice indices from the analysis - use the first entry for now
@@ -278,12 +278,19 @@ public:
                                      .getDefiningOp<affine::AffineLoadOp>();
             notDstMemspace(potentialLoad)) {
           // Use DST slice index from analysis
-          int64_t dstSliceIndex = dstSliceIdxCounter < dstSliceIndices.size()
-                                      ? dstSliceIndices[dstSliceIdxCounter]
-                                      : dstSliceAllocationState.allocate();
+          if (dstSliceIdxCounter >= dstSliceIndices.size()) {
+            llvm::errs() << "ERROR: dstSliceIdxCounter (" << dstSliceIdxCounter
+                         << ") out of bounds for dstSliceIndices (size: "
+                         << dstSliceIndices.size() << ") during load access\n";
+            return;
+          }
+          int64_t dstSliceIndex = dstSliceIndices[dstSliceIdxCounter];
+          llvm::errs() << "  Accessing dstSliceIndices[" << dstSliceIdxCounter
+                       << "] = " << dstSliceIndex << "\n";
           collectDstAccess<affine::AffineLoadOp>(op, potentialLoad, copyInfos,
                                                  dstSliceIndex,
                                                  outermostInnerComputeLoop);
+          dstSliceIdxCounter++;
         }
       }
 
@@ -292,8 +299,8 @@ public:
         if (auto potentialStore = mlir::dyn_cast<affine::AffineStoreOp>(user);
             notDstMemspace(potentialStore)) {
 
-          assert(!dstSliceAllocationState.didStoreToDst() &&
-                 "Multiple stores from last op to dst not supported");
+          // assert(!dstSliceAllocationState.didStoreToDst() &&
+          //        "Multiple stores from last op to dst not supported");
 
           auto dstRegInPlace = computeOp.getDstRegInPlace();
           int64_t dstSliceIndex = -1;
@@ -308,15 +315,34 @@ public:
                    "place, multi-operand ops would reference wrong tile, but "
                    "those ops should be setting output tile.");
             // Use index from analysis for in-place ops
-            dstSliceIndex = dstSliceIdxCounter < dstSliceIndices.size()
-                                ? dstSliceIndices[dstSliceIdxCounter]
-                                : dstSliceAllocationState.getCurrSliceIndex();
+            if (dstSliceIndices.empty()) {
+              llvm::errs() << "ERROR: dstSliceIndices is empty when accessing "
+                           << "last element for in-place store\n";
+              return;
+            }
+            dstSliceIndex = dstSliceIndices[dstSliceIndices.size() - 1];
+            llvm::errs() << "  In-place store accessing dstSliceIndices["
+                         << (dstSliceIndices.size() - 1)
+                         << "] = " << dstSliceIndex << "\n";
+            // dstSliceIdxCounter < dstSliceIndices.size()
+            //                     ?
+            //                     :
+            //                     dstSliceAllocationState.getCurrSliceIndex();
           } else {
             // Use index from analysis
-            dstSliceIndex = dstSliceIdxCounter < dstSliceIndices.size()
-                                ? dstSliceIndices[dstSliceIdxCounter]
-                                : dstSliceAllocationState.allocate();
-            dstSliceAllocationState.setStoreToDst();
+            if (dstSliceIndices.empty()) {
+              llvm::errs() << "ERROR: dstSliceIndices is empty when accessing "
+                           << "last element for non-in-place store\n";
+              return;
+            }
+            dstSliceIndex = dstSliceIndices[dstSliceIndices.size() - 1];
+            llvm::errs() << "  Non-in-place store accessing dstSliceIndices["
+                         << (dstSliceIndices.size() - 1)
+                         << "] = " << dstSliceIndex << "\n";
+            // dstSliceIndex = dstSliceIdxCounter < dstSliceIndices.size()
+            //                     ? dstSliceIndices[dstSliceIdxCounter]
+            //                     : dstSliceAllocationState.allocate();
+            // dstSliceAllocationState.setStoreToDst();
           }
           collectDstAccess<affine::AffineStoreOp>(op, potentialStore, copyInfos,
                                                   dstSliceIndex,
@@ -334,14 +360,26 @@ public:
           assert(!dstRegisterAllocation.contains(computeOp));
           // If op stores to dst in place, we don't need to allocate a new dst
           // register, just use the current dst index from analysis.
-          int32_t allocatedIndex =
-              computeOp.getDstRegInPlace()
-                  ? (dstSliceIdxCounter < dstSliceIndices.size()
-                         ? dstSliceIndices[dstSliceIdxCounter]
-                         : dstSliceAllocationState.getCurrSliceIndex())
-                  : (dstSliceIdxCounter < dstSliceIndices.size()
-                         ? dstSliceIndices[dstSliceIdxCounter]
-                         : dstSliceAllocationState.allocate());
+
+          if (dstSliceIdxCounter >= dstSliceIndices.size()) {
+            llvm::errs() << "ERROR: dstSliceIdxCounter (" << dstSliceIdxCounter
+                         << ") out of bounds for dstSliceIndices (size: "
+                         << dstSliceIndices.size()
+                         << ") when allocating compute op result\n";
+            return;
+          }
+          int32_t allocatedIndex = dstSliceIndices[dstSliceIdxCounter];
+          llvm::errs() << "  Compute op result allocation using "
+                       << "dstSliceIndices[" << dstSliceIdxCounter
+                       << "] = " << allocatedIndex << "\n";
+          // computeOp.getDstRegInPlace()
+          //     ? (dstSliceIdxCounter < dstSliceIndices.size()
+          //            ? dstSliceIndices[dstSliceIdxCounter]
+          //            : dstSliceAllocationState.getCurrSliceIndex())
+          //     : (dstSliceIdxCounter < dstSliceIndices.size()
+          //            ? dstSliceIndices[dstSliceIdxCounter]
+          //            : dstSliceAllocationState.allocate());
+          // dstSliceIdxCounter++;
 
           dstRegisterAllocation[computeOp] = {allocatedIndex,
                                               outermostInnerComputeLoop};

@@ -125,14 +125,25 @@ struct D2MGenericComputeRewriter : public OpRewritePattern<linalg::GenericOp> {
     auto outputTensor =
         mlir::cast<MemRefType>(op.getOutputs().front().getType());
 
+    llvm::errs() << "\n[D2MGenericComputeRewriter] Processing GenericOp\n";
+    llvm::errs() << "  Output shape: ";
+    for (auto dim : outputTensor.getShape()) {
+      llvm::errs() << dim << " ";
+    }
+    llvm::errs() << "\n";
+
     // Calculate DST capacity to determine if we can optimize subblocking.
     Type largestDstType = utils::getRegionLargestDstElemType(op.getRegion());
     const unsigned dstCapacity =
         ttcore::getOpChipDescAttr(op).getDstLogicalSizeTiles(
             largestDstType, false, maxDstPhysicalSizeTiles);
 
+    llvm::errs() << "  DST capacity: " << dstCapacity << "\n";
+
     // Get max DST usage for this GenericOp from the analysis.
     int maxDstUsage = analysis->getDstMaxUsage(op);
+
+    llvm::errs() << "  Max DST usage from analysis: " << maxDstUsage << "\n";
 
     // Enable subblocking optimization if DST can hold multiple copies of the
     // usage pattern. For example, if dstCapacity = 8 and maxDstUsage = 3, we
@@ -155,6 +166,7 @@ struct D2MGenericComputeRewriter : public OpRewritePattern<linalg::GenericOp> {
     // analysis pass or does it have to be done in runtime, or do we pad.
     if (optimizeSubblocking &&
         outputTensor.getShape()[0] % subblockFactor == 0) {
+      llvm::errs() << "  Subblocking ENABLED:\n";
       // Calculate output subblock shape based on subblockFactor.
       // First dimension is capped at the actual output shape.
       int64_t dim0 = std::min(static_cast<int64_t>(subblockFactor),
@@ -211,8 +223,6 @@ public:
     for (auto &[genericOp, dstInfo] : analysis.genericOpMap) {
       llvm::errs() << "GenericOp: " << genericOp->getName().getStringRef()
                    << " (max DST usage: " << dstInfo.dstMaxUsage << ")\n";
-      llvm::errs() << "  DST Slice Indices (" << dstInfo.dstSliceIndices.size()
-                   << " compute ops): ";
       for (int idx : dstInfo.dstSliceIndices) {
         llvm::errs() << idx << " ";
       }
