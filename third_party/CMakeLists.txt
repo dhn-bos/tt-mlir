@@ -117,9 +117,17 @@ ExternalProject_Add(
     -DENABLE_TRACY=${TT_RUNTIME_ENABLE_PERF_TRACE}
     -DENABLE_LIBCXX=OFF
     -DENABLE_DISTRIBUTED=${ENABLE_DISTRIBUTED}
-  GIT_REPOSITORY https://github.com/tenstorrent/tt-metal.git
-  GIT_TAG ${TT_METAL_VERSION}
-  GIT_PROGRESS OFF
+    # turn off
+    -DTT_UMD_BUILD_TESTS=OFF
+  # uncomment this if you already cloned A0 tt-metal
+  SOURCE_DIR ${TTMLIR_SOURCE_DIR}/third_party/tt-metal/src/tt-metal
+  DOWNLOAD_COMMAND ""
+  UPDATE_COMMAND ""
+  # and comment out
+  # GIT_REPOSITORY https://github.com/tenstorrent/tt-metal.git
+  # GIT_TAG ${TT_METAL_VERSION}
+  # GIT_PROGRESS ON
+  # end
   BUILD_BYPRODUCTS ${TTNN_LIBRARY_PATH} ${TTNN_PY_LIBRARY_PATH} ${TTMETAL_LIBRARY_PATH} ${TRACY_LIBRARY_PATH} ${DEVICE_LIBRARY_PATH} ${TT_STL_LIBRARY_PATH}
 )
 

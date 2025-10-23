@@ -38,10 +38,17 @@ ExternalProject_Add(
     -DCMAKE_INSTALL_PREFIX=${TTMLIR_TOOLCHAIN_DIR}
     -DFLATBUFFERS_BUILD_TESTS=OFF
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON # Required for linking into shared libraries (python bindings)
+    # uncomment this if you already cloned
+    # DOWNLOAD_COMMAND ""
+    # UPDATE_COMMAND ""
+    # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/flatbuffers
+    # and comment
     GIT_REPOSITORY https://github.com/google/flatbuffers.git
     GIT_TAG ${FLATBUFFERS_VERSION}
+    GIT_PROGRESS ON
     GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
     UPDATE_DISCONNECTED ON
+    # end
     DEPENDS python-venv
 )
 
@@ -49,7 +56,6 @@ ExternalProject_Add(
 ExternalProject_Add(
     llvm-project
     # Super hacky way to install the python dependencies before the build
-    PATCH_COMMAND git config user.email "tt-mlir@tenstorrent.com" && git config user.name "tenstorrent" && git apply --index "${CMAKE_CURRENT_LIST_DIR}/patches/llvm.patch" && git commit -m "tt-mlir related patch" && bash -c "source ${CMAKE_CURRENT_SOURCE_DIR}/activate && pip install -r mlir/python/requirements.txt"
     CMAKE_GENERATOR Ninja
     CMAKE_ARGS
     -DCMAKE_BUILD_TYPE=${LLVM_BUILD_TYPE}
@@ -66,11 +72,19 @@ ExternalProject_Add(
     -DCMAKE_C_FLAGS=-D_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION
     SOURCE_SUBDIR llvm
     LIST_SEPARATOR ","
+    # uncomment this if you already cloned
+    # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/llvm-project
+    # PATCH_COMMAND bash -c "source ${CMAKE_CURRENT_SOURCE_DIR}/activate && pip install -r mlir/python/requirements.txt"
+    # DOWNLOAD_COMMAND ""
+    # UPDATE_COMMAND ""
+    # and comment
+    PATCH_COMMAND git config user.email "dhn@bos-semi.com" && git config user.name "dongho" && git apply --index "${CMAKE_CURRENT_LIST_DIR}/patches/llvm.patch" && git commit -m "tt-mlir related patch" && bash -c "source ${CMAKE_CURRENT_SOURCE_DIR}/activate && pip install -r mlir/python/requirements.txt"
     GIT_REPOSITORY https://github.com/llvm/llvm-project.git
     GIT_TAG ${LLVM_PROJECT_VERSION}
-    GIT_PROGRESS OFF
+    GIT_PROGRESS ON
     GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
     UPDATE_DISCONNECTED ON
+    # end
     DEPENDS python-venv
 )
 
