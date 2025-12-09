@@ -62,7 +62,7 @@ class Query:
         Query.register_arg(
             name="--disable-eth-dispatch",
             type=bool,
-            default=False,
+            default=True,
             choices=[True, False],
             help="disable putting dispatch on ethernet cores - place it on worker cores instead",
         )
@@ -223,6 +223,7 @@ class Query:
                 query_parser.add_argument(
                     f"{name}",
                     action="store_true",
+                    default=attributes["default"],
                     help=attributes["help"],
                 )
             else:
