@@ -101,7 +101,7 @@ class Perf:
         Perf.register_arg(
             name="--disable-eth-dispatch",
             type=bool,
-            default=False,
+            default=True,
             choices=[True, False],
             help="disable putting dispatch on ethernet cores - place it on worker cores instead",
         )
@@ -896,6 +896,7 @@ class Perf:
                 perf_parser.add_argument(
                     f"{name}",
                     action="store_true",
+                    default=attributes["default"],
                     help=attributes["help"],
                 )
             else:

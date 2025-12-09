@@ -263,7 +263,7 @@ class Run:
         Run.register_arg(
             name="--disable-eth-dispatch",
             type=bool,
-            default=False,
+            default=True,
             choices=[True, False],
             help="disable putting dispatch on ethernet cores - place it on worker cores instead; necessary on blackhole",
         )
@@ -1314,6 +1314,7 @@ class Run:
                 run_parser.add_argument(
                     f"{name}",
                     action="store_true",
+                    default=attributes["default"],
                     help=attributes["help"],
                 )
             else:
