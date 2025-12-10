@@ -412,13 +412,23 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
 
     ttnn_to_emitc::EmitCTTNNEmitter<SourceOp> emitter(srcOp, adaptor, rewriter);
-
-    llvm::SmallVector<mlir::Attribute> args{
+    llvm::SmallVector<mlir::Attribute> args;
+    if (auto arr = srcOp.getActivation()) {
+      args = {
         emitter.emit(srcOp.getLhs()),
         emitter.emit(srcOp.getRhs()),
         emitter.emit(srcOp.getDtype()),
+        emitter.template emit<mlir::ArrayAttr>(arr),
         emitter.emit(std::nullopt) | emitter.getMemoryConfig(srcOp.getResult()),
-    };
+      };
+    } else {
+      args = {
+          emitter.emit(srcOp.getLhs()),
+          emitter.emit(srcOp.getRhs()),
+          emitter.emit(srcOp.getDtype()),
+          emitter.emit(std::nullopt) | emitter.getMemoryConfig(srcOp.getResult()),
+      };
+    }
 
     emitter.replaceOp(*this, args);
 

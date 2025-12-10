@@ -468,88 +468,6 @@ toFlatbuffer(FlatbufferObjectCache &cache, ttcore::GridAttr tensorGrid,
   return toFlatbuffer(cache, tensorGrid.getShape(), mapping);
 }
 
-template <typename AttrType, typename ValueType>
-struct ArrayAttrToFlatbufferSerializer {
-  static flatbuffers::Offset<flatbuffers::Vector<ValueType>>
-  impl(FlatbufferObjectCache &cache, const ArrayAttr &arrayAttr) {
-    assert(false && "unsupported array attr to value type serializer");
-  }
-};
-
-template <typename ValueType>
-struct ArrayAttrToFlatbufferSerializer<IntegerAttr, ValueType> {
-  static flatbuffers::Offset<flatbuffers::Vector<ValueType>>
-  impl(FlatbufferObjectCache &cache, const ::mlir::ArrayAttr &arrayAttr) {
-    return cache.fbb->CreateVector<ValueType>(
-        arrayAttr.size(), [&arrayAttr](size_t i) {
-          return static_cast<ValueType>(
-              mlir::cast<IntegerAttr>(arrayAttr[i]).getInt());
-        });
-  }
-};
-
-template <typename AttrType, typename ValueType>
-inline flatbuffers::Offset<flatbuffers::Vector<ValueType>>
-arrayAttrToFlatbuffer(FlatbufferObjectCache &cache,
-                      const ::mlir::ArrayAttr &arrayAttr) {
-  return ArrayAttrToFlatbufferSerializer<AttrType, ValueType>::impl(cache,
-                                                                    arrayAttr);
-}
-
-template <typename AttrType, typename ValueType>
-inline flatbuffers::Offset<flatbuffers::Vector<ValueType>>
-arrayAttrToFlatbuffer(FlatbufferObjectCache &cache,
-                      const std::optional<::mlir::ArrayAttr> &arrayAttrOpt) {
-  return arrayAttrOpt.has_value() ? arrayAttrToFlatbuffer<AttrType, ValueType>(
-                                        cache, arrayAttrOpt.value())
-                                  : 0;
-}
-
-inline flatbuffers::Offset<flatbuffers::Vector<uint32_t>>
-toFlatbuffer(FlatbufferObjectCache &cache, ElementsAttr elementsAttr) {
-  assert(elementsAttr.getElementType().isIntOrIndexOrFloat() &&
-         "unsupported elements attr type");
-  assert(elementsAttr.isSplat() && "expected a splat elements attr");
-  assert(elementsAttr.getElementType().getIntOrFloatBitWidth() == 32 &&
-         "unsupported elements attr bit width");
-  uint32_t value = 0;
-  if (elementsAttr.getElementType().isInteger()) {
-    value = elementsAttr.getSplatValue<int>();
-  } else {
-    *(reinterpret_cast<float *>(&value)) = elementsAttr.getSplatValue<float>();
-  }
-  SmallVector<uint32_t> data({value});
-  return toFlatbuffer(cache, ArrayRef<uint32_t>(data));
-}
-
-inline double toFlatbuffer(FlatbufferObjectCache &, mlir::FloatAttr attr) {
-  return attr.getValueAsDouble();
-}
-
-inline ::tt::target::ttnn::CoreCoord
-toFlatbuffer(FlatbufferObjectCache &cache, ttnn::CoreCoordAttr coreCoordAttr) {
-  return ::tt::target::ttnn::CoreCoord(coreCoordAttr.getX(),
-                                       coreCoordAttr.getY());
-}
-
-inline ::tt::target::ttnn::CoreRange
-toFlatbuffer(FlatbufferObjectCache &cache, ttnn::CoreRangeAttr coreRangeAttr) {
-  return ::tt::target::ttnn::CoreRange(
-      toFlatbuffer(cache, coreRangeAttr.getStartCoord()),
-      toFlatbuffer(cache, coreRangeAttr.getEndCoord()));
-}
-
-inline ::flatbuffers::Offset<::tt::target::ttnn::CoreRangeSet>
-toFlatbuffer(FlatbufferObjectCache &cache,
-             ttnn::CoreRangeSetAttr coreRangeSetAttr) {
-  if (!coreRangeSetAttr) {
-    return 0;
-  }
-
-  return ::tt::target::ttnn::CreateCoreRangeSet(
-      *cache.fbb, toFlatbuffer(cache, coreRangeSetAttr.getCoreRanges()));
-}
-
 inline ::tt::target::ttnn::UnaryOpType
 toFlatbuffer(FlatbufferObjectCache &, ttnn::UnaryOpType unaryOpType) {
   using MlirUnaryOpType = ::mlir::tt::ttnn::UnaryOpType;
@@ -644,6 +562,111 @@ toFlatbuffer(FlatbufferObjectCache &, ttnn::UnaryOpType unaryOpType) {
   llvm_unreachable("Unsupported unary op type");
 }
 
+inline double toFlatbuffer(FlatbufferObjectCache &, mlir::FloatAttr attr) {
+  return attr.getValueAsDouble();
+}
+
+
+template <typename AttrType, typename ValueType>
+struct ArrayAttrToFlatbufferSerializer {
+  static flatbuffers::Offset<flatbuffers::Vector<ValueType>>
+  impl(FlatbufferObjectCache &cache, const ArrayAttr &arrayAttr) {
+    assert(false && "unsupported array attr to value type serializer");
+  }
+};
+
+template <typename ValueType>
+struct ArrayAttrToFlatbufferSerializer<IntegerAttr, ValueType> {
+  static flatbuffers::Offset<flatbuffers::Vector<ValueType>>
+  impl(FlatbufferObjectCache &cache, const ::mlir::ArrayAttr &arrayAttr) {
+    return cache.fbb->CreateVector<ValueType>(
+        arrayAttr.size(), [&arrayAttr](size_t i) {
+          return static_cast<ValueType>(
+              mlir::cast<IntegerAttr>(arrayAttr[i]).getInt());
+        });
+  }
+};
+
+inline ::flatbuffers::Offset<::tt::target::ttnn::UnaryWithParam>
+toFlatbuffer(FlatbufferObjectCache &cache,
+             ttnn::UnaryWithParamAttr unaryWithParam) {
+  return ::tt::target::ttnn::CreateUnaryWithParam(
+      *cache.fbb, toFlatbuffer(cache, unaryWithParam.getOpType()),
+      toFlatbuffer(cache, unaryWithParam.getParams()));
+}
+
+template <>  
+struct ArrayAttrToFlatbufferSerializer<ttnn::UnaryWithParamAttr, flatbuffers::Offset<::tt::target::ttnn::UnaryWithParam>> {  
+  static flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<::tt::target::ttnn::UnaryWithParam>>>  
+  impl(FlatbufferObjectCache &cache, const ::mlir::ArrayAttr &arrayAttr) {  
+    return cache.fbb->CreateVector<flatbuffers::Offset<::tt::target::ttnn::UnaryWithParam>>(  
+        arrayAttr.size(), [&cache, &arrayAttr](size_t i) {  
+          return toFlatbuffer(cache, mlir::cast<ttnn::UnaryWithParamAttr>(arrayAttr[i]));  
+        });  
+  }  
+};
+
+template <typename AttrType, typename ValueType>
+inline flatbuffers::Offset<flatbuffers::Vector<ValueType>>
+arrayAttrToFlatbuffer(FlatbufferObjectCache &cache,
+                      const ::mlir::ArrayAttr &arrayAttr) {
+  return ArrayAttrToFlatbufferSerializer<AttrType, ValueType>::impl(cache,
+                                                                    arrayAttr);
+}
+
+template <typename AttrType, typename ValueType>
+inline flatbuffers::Offset<flatbuffers::Vector<ValueType>>
+arrayAttrToFlatbuffer(FlatbufferObjectCache &cache,
+                      const std::optional<::mlir::ArrayAttr> &arrayAttrOpt) {
+  return arrayAttrOpt.has_value() ? arrayAttrToFlatbuffer<AttrType, ValueType>(
+                                        cache, arrayAttrOpt.value())
+                                  : 0;
+}
+
+inline flatbuffers::Offset<flatbuffers::Vector<uint32_t>>
+toFlatbuffer(FlatbufferObjectCache &cache, ElementsAttr elementsAttr) {
+  assert(elementsAttr.getElementType().isIntOrIndexOrFloat() &&
+         "unsupported elements attr type");
+  assert(elementsAttr.isSplat() && "expected a splat elements attr");
+  assert(elementsAttr.getElementType().getIntOrFloatBitWidth() == 32 &&
+         "unsupported elements attr bit width");
+  uint32_t value = 0;
+  if (elementsAttr.getElementType().isInteger()) {
+    value = elementsAttr.getSplatValue<int>();
+  } else {
+    *(reinterpret_cast<float *>(&value)) = elementsAttr.getSplatValue<float>();
+  }
+  SmallVector<uint32_t> data({value});
+  return toFlatbuffer(cache, ArrayRef<uint32_t>(data));
+}
+
+
+
+inline ::tt::target::ttnn::CoreCoord
+toFlatbuffer(FlatbufferObjectCache &cache, ttnn::CoreCoordAttr coreCoordAttr) {
+  return ::tt::target::ttnn::CoreCoord(coreCoordAttr.getX(),
+                                       coreCoordAttr.getY());
+}
+
+inline ::tt::target::ttnn::CoreRange
+toFlatbuffer(FlatbufferObjectCache &cache, ttnn::CoreRangeAttr coreRangeAttr) {
+  return ::tt::target::ttnn::CoreRange(
+      toFlatbuffer(cache, coreRangeAttr.getStartCoord()),
+      toFlatbuffer(cache, coreRangeAttr.getEndCoord()));
+}
+
+inline ::flatbuffers::Offset<::tt::target::ttnn::CoreRangeSet>
+toFlatbuffer(FlatbufferObjectCache &cache,
+             ttnn::CoreRangeSetAttr coreRangeSetAttr) {
+  if (!coreRangeSetAttr) {
+    return 0;
+  }
+
+  return ::tt::target::ttnn::CreateCoreRangeSet(
+      *cache.fbb, toFlatbuffer(cache, coreRangeSetAttr.getCoreRanges()));
+}
+
+
 inline ::flatbuffers::Offset<
     ::tt::target::ttnn::MatmulMultiCoreReuseProgramConfig>
 toFlatbuffer(FlatbufferObjectCache &cache,
@@ -656,13 +679,6 @@ toFlatbuffer(FlatbufferObjectCache &cache,
       matmulConfigAttr.getPerCoreM(), matmulConfigAttr.getPerCoreN());
 }
 
-inline ::flatbuffers::Offset<::tt::target::ttnn::UnaryWithParam>
-toFlatbuffer(FlatbufferObjectCache &cache,
-             ttnn::UnaryWithParamAttr unaryWithParam) {
-  return ::tt::target::ttnn::CreateUnaryWithParam(
-      *cache.fbb, toFlatbuffer(cache, unaryWithParam.getOpType()),
-      toFlatbuffer(cache, unaryWithParam.getParams()));
-}
 
 inline ::flatbuffers::Offset<
     ::tt::target::ttnn::MatmulMultiCoreReuseMultiCastProgramConfig>

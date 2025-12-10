@@ -149,6 +149,87 @@ private:
   }
 };
 
+template <typename SrcOp, typename ActivationOp>
+class TTNNEltwiseBinaryWithActivation  : public mlir::OpRewritePattern<SrcOp> {
+  using TTNNEltwiseBinaryWithActivation::template OpRewritePattern<SrcOp>::OpRewritePattern;
+
+public:
+  mlir::LogicalResult matchAndRewrite(SrcOp srcOp,
+                                      mlir::PatternRewriter &rewriter) const final {
+    if (!isFusable(srcOp)) {
+      return failure();
+    }
+
+    ActivationOp activationOp = getActivationOp(srcOp);
+    Value activationInput = activationOp.getInput();
+
+    ttnn::UnaryOpType activation = getActivationOpType(rewriter);
+    
+    // Create new config attributes array
+    llvm::SmallVector<mlir::Attribute> newActivationAttrs;
+
+    // Copy existing list of activation attributes if any
+    if (auto actAttr = srcOp.getActivation()) {
+      mlir::ArrayAttr activationAttrs = actAttr.value();  
+      for (auto attr : activationAttrs) {
+        newActivationAttrs.push_back(attr);
+      }
+    }
+
+    // create a UnaryWithParamAttr with no params for 'activation'
+    auto makeUnaryWithParamAttr = [&](ttnn::UnaryOpType t) -> mlir::Attribute {
+      llvm::ArrayRef<FloatAttr> params = llvm::ArrayRef<FloatAttr>{};
+      return ttnn::UnaryWithParamAttr::get(rewriter.getContext(), t,
+                                           params);
+    };
+
+    newActivationAttrs.push_back(makeUnaryWithParamAttr(activation));
+    
+    // Create UnaryWithParamArrayAttr from elements and set it on the op
+    mlir::ArrayAttr replace =
+        mlir::ArrayAttr::get(rewriter.getContext(),
+                                           newActivationAttrs);
+    rewriter.modifyOpInPlace(srcOp, [&]() { srcOp.setActivationAttr(replace); });
+
+    rewriter.replaceAllUsesWith(activationOp, activationInput);
+    return mlir::success();
+  }
+
+private:
+  ActivationOp getActivationOp(SrcOp srcOp) const {  
+    assert(ttmlir::utils::allUsersOfType<ActivationOp>(srcOp) &&   
+          "Expected activation as only user");  
+    return mlir::cast<ActivationOp>(*srcOp.getResult().getUsers().begin());  
+  }
+
+  ttnn::UnaryOpType getActivationOpType(mlir::PatternRewriter &rewriter) const {
+    if constexpr (std::is_same_v<ActivationOp, ReluOp>) {
+      return ttnn::UnaryOpType::Relu;
+    } else if constexpr (std::is_same_v<ActivationOp, Relu6Op>) {
+      return ttnn::UnaryOpType::Relu6;
+    } else if constexpr (std::is_same_v<ActivationOp, SiluOp>) {
+      return ttnn::UnaryOpType::Silu;
+    } else if constexpr (std::is_same_v<ActivationOp, SigmoidOp>) {
+      return ttnn::UnaryOpType::Sigmoid;
+    } else {
+      static_assert(ttmlir::utils::always_false<ActivationOp>(),
+                    "Unsupported activation op");
+    }
+  }
+
+  bool isFusable(SrcOp srcOp) const {
+    // Check if the operation has multiple uses so we cannot fuse.
+    if (!srcOp.getResult().hasOneUse()) {
+      return false;
+    }
+
+    // Check user is activation so we can fuse.
+    if (ttmlir::utils::allUsersOfType<ActivationOp>(srcOp)) {
+      return true;
+    }
+    return false;
+  }
+};
 class TTNNFusingPass : public impl::TTNNFusingBase<TTNNFusingPass> {
 public:
   using impl::TTNNFusingBase<TTNNFusingPass>::TTNNFusingBase;
@@ -157,7 +238,41 @@ public:
     RewritePatternSet patterns(&getContext());
     patterns.add<TTNNConv2dWithActivation<ReluOp>,
                  TTNNConv2dWithActivation<Relu6Op>,
-                 TTNNConv2dWithActivation<SiluOp>>(&getContext());
+                 TTNNConv2dWithActivation<SiluOp>,
+                 TTNNEltwiseBinaryWithActivation<AddOp, ReluOp>,
+                 TTNNEltwiseBinaryWithActivation<AddOp, Relu6Op>,
+                 TTNNEltwiseBinaryWithActivation<AddOp, SiluOp>,
+                 TTNNEltwiseBinaryWithActivation<AddOp, SigmoidOp>,
+                 TTNNEltwiseBinaryWithActivation<DivideOp, ReluOp>,
+                 TTNNEltwiseBinaryWithActivation<DivideOp, Relu6Op>,
+                 TTNNEltwiseBinaryWithActivation<DivideOp, SiluOp>,
+                 TTNNEltwiseBinaryWithActivation<DivideOp, SigmoidOp>,
+                 TTNNEltwiseBinaryWithActivation<SubtractOp, ReluOp>,
+                 TTNNEltwiseBinaryWithActivation<SubtractOp, Relu6Op>,
+                 TTNNEltwiseBinaryWithActivation<SubtractOp, SiluOp>,
+                 TTNNEltwiseBinaryWithActivation<SubtractOp, SigmoidOp>,
+                 TTNNEltwiseBinaryWithActivation<MultiplyOp, ReluOp>,
+                 TTNNEltwiseBinaryWithActivation<MultiplyOp, Relu6Op>,
+                 TTNNEltwiseBinaryWithActivation<MultiplyOp, SiluOp>,
+                 TTNNEltwiseBinaryWithActivation<MultiplyOp, SigmoidOp>>(&getContext());
+    
+    // // Define operation and activation types  
+    // using EltwiseBinaryOps = std::tuple<AddOp, DivideOp, SubtractOp, MultiplyOp>;  
+    // using ActivationOps = std::tuple<ReluOp, Relu6Op, SiluOp, SigmoidOp>;  
+      
+    // // For loop to add all combinations  
+    // auto addPatterns = [&](auto eltwiseOp, auto ActivationOp) {
+    //     using OpE = std::decay_t<decltype(eltwiseOp)>;
+    //     using OpA = std::decay_t<decltype(ActivationOp)>;
+
+    //     patterns.add<TTNNEltwiseBinaryWithActivation<OpE, OpA>>(&getContext());
+    // };
+
+    // std::apply([&](auto ...Es) {
+    //     std::apply([&](auto ...As) {
+    //         (addPatterns(Es, As), ...);
+    //     }, ActivationOps{});
+    // }, EltwiseBinaryOps{});
     GreedyRewriteConfig config;
     config.setUseTopDownTraversal(true);
     (void)applyPatternsGreedily(getOperation(), std::move(patterns));

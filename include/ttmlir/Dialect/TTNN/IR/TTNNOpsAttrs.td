@@ -253,6 +253,15 @@ def UnaryWithParamAttr : TTNN_Attr<"UnaryWithParam", "unary_with_param"> {
   let assemblyFormat = "`<` `op_type` `=` qualified($op_type) (`,` `params` `=` `[` $params^ `]`)? `>`";
 }
 
+def UnaryWithParamArrayAttr
+    : TypedArrayAttrBase<UnaryWithParamAttr, ""> {
+  let summary = "Array of UnaryWithParamAttr";
+  let description = [{
+    Array of #ttnn.unary_with_param attributes used for fused activations.
+  }];
+}
+
+
 def TTNN_MatmulMultiCoreReuseProgramConfigAttr : TTNN_Attr<"MatmulMultiCoreReuseProgramConfig", "matmul_multi_core_reuse_program_config"> {
   let summary = "TTNN MatmulMultiCoreReuseProgramConfig";
   let description = [{

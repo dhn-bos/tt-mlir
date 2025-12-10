@@ -1006,10 +1006,18 @@ createEltwiseBinaryOp(FlatbufferObjectCache &cache, EltwiseBinaryOp op) {
     outputDtype = toFlatbuffer(cache, *op.getDtype());
   }
 
-  auto memoryConfig = getMemoryConfigIfNeeded(cache, op);
+  
+  flatbuffers::Offset<flatbuffers::Vector< flatbuffers::Offset< ::tt::target::ttnn::UnaryWithParam > >> activation;
 
-  return ::tt::target::ttnn::CreateEltwiseBinaryOp(
-      *cache.fbb, type, lhs, rhs, outputDtype, memoryConfig, out);
+  auto memoryConfig = getMemoryConfigIfNeeded(cache, op);
+  if (op.getActivation()) {
+    activation = arrayAttrToFlatbuffer<ttnn::UnaryWithParamAttr, flatbuffers::Offset<::tt::target::ttnn::UnaryWithParam>>(cache, op.getActivation());
+    return ::tt::target::ttnn::CreateEltwiseBinaryOp(
+        *cache.fbb, type, lhs, rhs, outputDtype, activation, memoryConfig, out);
+  } else {
+    return ::tt::target::ttnn::CreateEltwiseBinaryOp(
+        *cache.fbb, type, lhs, rhs, outputDtype, 0, memoryConfig, out);
+  }
 }
 
 template <typename EltwiseBinaryCompositeOp>

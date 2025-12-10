@@ -165,6 +165,7 @@ class TTNN_ElementwiseBinaryOp<string mnemonic, list<Trait> traits = []> :
     let arguments = (ins AnyRankedTensor:$lhs,
                          AnyRankedTensor:$rhs,
                          OptionalAttr<TTCore_DataTypeAttr>:$dtype,
+                         OptionalAttr<UnaryWithParamArrayAttr>:$activation,
                          OptionalAttr<TTNN_MemoryConfigAttr>:$memory_config);
     let results = (outs AnyRankedTensor:$result);
 
@@ -186,7 +187,7 @@ class TTNN_ElementwiseBinaryOp<string mnemonic, list<Trait> traits = []> :
         {
           outputDTypeAttr = $_builder.getAttr<ttcore::DataTypeAttr>(layoutAttr.getDataType());
         }
-        build($_builder, $_state, resultType, lhs, rhs, outputDTypeAttr, /*memory_config=*/nullptr);
+        build($_builder, $_state, resultType, lhs, rhs, outputDTypeAttr, /*activation=*/nullptr, /*memory_config=*/nullptr);
       }]>
     ];
 }

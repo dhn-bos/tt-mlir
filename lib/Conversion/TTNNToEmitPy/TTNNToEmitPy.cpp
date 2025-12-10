@@ -247,16 +247,25 @@ public:
 
     ttnn_to_emitpy::EmitPyTTNNEmitter<TTNNOpTy> emitter(eltwiseBinaryOp,
                                                         adaptor, rewriter);
-
-    llvm::SmallVector<mlir::Attribute> args{
-        emitter.emit(eltwiseBinaryOp.getLhs()),
-        emitter.emit(eltwiseBinaryOp.getRhs()),
-        emitter.emit(eltwiseBinaryOp.getDtype(), "dtype"),
-        emitter.emit(eltwiseBinaryOp.getMemoryConfig() |
-                         emitter.getMemoryConfig(eltwiseBinaryOp.getResult()),
-                     "memory_config"),
-    };
-
+    llvm::SmallVector<mlir::Attribute> args;
+    if (auto arr = eltwiseBinaryOp.getActivation()){
+      args = {
+          emitter.emit(eltwiseBinaryOp.getLhs()),
+          emitter.emit(eltwiseBinaryOp.getRhs()),
+          emitter.emit(eltwiseBinaryOp.getDtype(), "dtype"),
+          emitter.template emit<mlir::ArrayAttr>(arr),
+          emitter.emit(eltwiseBinaryOp.getMemoryConfig() | emitter.getMemoryConfig(eltwiseBinaryOp.getResult()), "memory_config"),
+      };
+    } else {
+        args = {
+          emitter.emit(eltwiseBinaryOp.getLhs()),
+          emitter.emit(eltwiseBinaryOp.getRhs()),
+          emitter.emit(eltwiseBinaryOp.getDtype(), "dtype"),
+          emitter.emit(eltwiseBinaryOp.getMemoryConfig() |
+                          emitter.getMemoryConfig(eltwiseBinaryOp.getResult()),
+                      "memory_config"),
+      };
+    }
     emitter.replaceOp(*this, args);
 
     return success();
