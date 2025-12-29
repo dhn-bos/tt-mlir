@@ -33,11 +33,19 @@ struct OpConfigAnalysisInput {
   }
 };
 
+struct OpConfigAnalysisResult {  
+  // Operation -> single layout  
+  llvm::DenseMap<Operation *, std::vector<TTNNLayoutAttr>> opLayouts;  
+    
+  // Operation -> vector of op-specific configs  
+  llvm::DenseMap<Operation *, std::vector<OpConfig::OpSpecificAttrs>> opSpecConfigs;  
+};
+
 // Determine optimal configuration for each op.
 //
 class OpConfigAnalysis
     : public TTNNAnalysis<OpConfigAnalysisInput,
-                          llvm::DenseMap<Operation *, OpConfig>> {
+                          OpConfigAnalysisResult> {
 
 private:
   void analysisImplementation() override;

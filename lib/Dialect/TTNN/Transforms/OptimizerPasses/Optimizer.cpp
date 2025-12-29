@@ -27,6 +27,8 @@
 #include "ttmlir/OpModel/TTNN/SingletonDeviceContext.h"
 #include "ttmlir/Support/Logger.h"
 #include "ttmlir/Utils.h"
+#include "ttmlir/Dialect/TTNN/Utils/Utils.h"  
+
 
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -43,6 +45,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
+using namespace mlir::tt::ttnn::utils;  
 
 namespace mlir::tt::ttnn {
 
@@ -414,12 +417,12 @@ public:
 
         // Update the output layout attribute with the new one.
         //
-        if (opConfigAnalysis.getResult().contains(op)) {
+        if (opConfigAnalysis.getResult().opLayouts.contains(op)) {
           // Preserve quantized element types on the tensor type. For
           // non-quantized tensors, use the scalar element type implied by the
           // chosen layout.
           TTNNLayoutAttr chosenLayout =
-              opConfigAnalysis.getResult().at(op).outputLayout;
+              opConfigAnalysis.getResult().opLayouts.at(op).front();
 
           Type originalElementType = tensorType.getElementType();
           Type newElementType = originalElementType;
@@ -500,68 +503,188 @@ public:
           //
 
           if (auto conv2dOp = mlir::dyn_cast<ttnn::Conv2dOp>(op)) {
-            auto opAttributes = opConfigAnalysis.getResult().at(op);
-            if (std::holds_alternative<ttnn::Conv2dAttrs>(
-                    opAttributes.opSpecificAttrs)) {
-              ttnn::Conv2dAttrs conv2dAttrs =
-                  std::get<ttnn::Conv2dAttrs>(opAttributes.opSpecificAttrs);
-              if (conv2dAttrs.conv2dConfig.has_value()) {
-                conv2dOp.setConv2dConfigAttr(conv2dAttrs.conv2dConfig.value());
+            auto specConfigs = opConfigAnalysis.getResult().opSpecConfigs.at(op);
+            
+            size_t bestRuntimeIdx = 0;  
+            size_t minRuntime = SIZE_MAX; 
+            [[maybe_unused]]bool canFindbest = false; 
+            for (size_t i = 0; i < specConfigs.size(); i++) {
+              OpConfig::OpSpecificAttrs opAttributes = specConfigs[i];
+              if (std::holds_alternative<ttnn::Conv2dAttrs> (
+                      opAttributes)) {
+                OpModel backend = mlir::dyn_cast<OpModel>(op);
+                if (!backend) {
+                  // This function should not be called for ops without backend constraints.
+                  llvm::report_fatal_error(
+                      ("Backend constraints are not implemented for op " +
+                      op->getName().getStringRef()));
+                }
+
+                // Constraints are implemented for this op.
+                //
+                auto deviceAttr = mlir::tt::ttcore::lookupDevice(op);
+                assert(deviceAttr);
+
+                uint32_t numOperands = op->getNumOperands();
+                if (llvm::isa<DestinationStyleOpInterface>(op)) {
+                  numOperands = numOperands - 1;
+                }
+
+                std::vector<TTNNLayoutAttr> inputLayouts;
+
+                for (uint32_t i = 0; i < numOperands; i++) {
+                  auto operand = op->getOperand(i);
+
+                  if (mlir::isa<TypedValue<mlir::tt::ttnn::DeviceType>>(operand)) {
+                    // Skip device type operand.
+                    continue;
+                  }
+
+                  RankedTensorType input = mlir::cast<RankedTensorType>(operand.getType());
+
+                  auto layout = mlir::cast<TTNNLayoutAttr>(input.getEncoding());
+                  TTMLIR_DEBUG(ttmlir::LogComponent::Optimizer,   
+                  "Input layout {}: layout={}, dtype={}, buffer_type={}, mem_layout={}, is_sharded={}",  
+                  i, static_cast<int>(layout.getLayout()),  
+                  static_cast<int>(layout.getDataType()),  
+                  layout.getBufferType(),  
+                  layout.getMemLayout() ? stringifyTensorMemoryLayout(layout.getMemLayout().getValue()) : "None",  
+                  layout.hasShardedTensorMemoryLayout()); 
+                  inputLayouts.push_back(layout);
+                }
+                OpConfig opHasLayout(chosenLayout, opAttributes);
+                llvm::Expected<op_model::OpConstraints> l1UsageExp = backend.getOpConstraints(inputLayouts, opHasLayout);
+
+                if (!l1UsageExp) {
+                  llvm::Error error = l1UsageExp.takeError();
+
+                  // early exit
+                  TTMLIR_DEBUG(
+                      ttmlir::LogComponent::Optimizer,
+                      "OpModel constraints failed: {1}",
+                      ttmlir::utils::firstNLines(llvm::toStringWithoutConsuming(error), 4));
+                  continue;
+                } 
+                [[maybe_unused]]auto [cBUsagePeak, tensorUsage, peakMemoryUsage, outputTensorUsage,
+                      outputLayout] = l1UsageExp.get();
+                
+                if (opHasLayout.outputLayout &&
+                    outputLayout != opHasLayout.outputLayout) {
+                  std::string message = "Output layout mismatch: backend returned layout "
+                                        "doesn't match requested consumer layout";
+                  TTMLIR_TRACE(ttmlir::LogComponent::Optimizer, "{}", message);
+                  continue;
+                }      
+                uint64_t producerL1OutputUsage = 0;
+                // auto inputLayouts = utils::extractInputLayouts(op);  
+                for (const auto& layout : inputLayouts) {  
+                    producerL1OutputUsage += layout.getShardSizeInBytes();  
+                }
+
+                bool l1UsageValid =
+                    (producerL1OutputUsage + tensorUsage + cBUsagePeak) < chipDesc.getUsableL1Size();
+
+                if (!l1UsageValid) {
+                  TTMLIR_DEBUG(
+                      ttmlir::LogComponent::Optimizer,
+                      "OpModel constraints failed: L1 usage exceeded for op {0}",
+                      op->getName().getStringRef());
+                  continue;
+                }
+                canFindbest = true;
+                llvm::Expected<size_t> runtimeExp = backend.getOpRuntime(inputLayouts, opHasLayout);
+                if (runtimeExp) {  
+                  size_t runtime = runtimeExp.get();  
+                  if (runtime < minRuntime) {  
+                    minRuntime = runtime;  
+                    bestRuntimeIdx = i;  
+                  }  
+                }
+                }
               }
-              if (conv2dAttrs.deviceComputeKernelConfig.has_value()) {
-                conv2dOp.setComputeConfigAttr(
-                    conv2dAttrs.deviceComputeKernelConfig.value());
+              [[maybe_unused]]auto config = std::get<ttnn::Conv2dAttrs>(specConfigs[bestRuntimeIdx]);    
+              TTMLIR_DEBUG(ttmlir::LogComponent::Optimizer,    
+                          "    Conv2dConfig: weights_dtype={}, getActBlockHOverride={}, "    
+                          "getEnableActDoubleBuffer={}",    
+                          config.conv2dConfig && config.conv2dConfig->getWeightsDtype() ?     
+                            [](ttcore::DataType dtype) -> std::string {  
+                                switch (dtype) {  
+                                case ttcore::DataType::BFloat16: return "bf16";  
+                                case ttcore::DataType::Float32: return "float32";  
+                                case ttcore::DataType::UInt32: return "uint32";  
+                                case ttcore::DataType::UInt16: return "uint16";  
+                                case ttcore::DataType::UInt8: return "uint8";  
+                                default: return "unknown";  
+                                }  
+                            }(*config.conv2dConfig->getWeightsDtype()) : "default",  
+                          config.conv2dConfig && config.conv2dConfig->getActBlockHOverride() ?   
+                              std::to_string(*config.conv2dConfig->getActBlockHOverride()) : "default",  
+                          config.conv2dConfig && config.conv2dConfig->getEnableActDoubleBuffer() ?   
+                              config.conv2dConfig->getEnableActDoubleBuffer().getValue() ? "true" : "false" : "default");
+              if (canFindbest) {
+                ttnn::Conv2dAttrs conv2dAttrs =
+                  std::get<ttnn::Conv2dAttrs>(specConfigs[bestRuntimeIdx]);
+                if (conv2dAttrs.conv2dConfig.has_value()) {
+                  conv2dOp.setConv2dConfigAttr(conv2dAttrs.conv2dConfig.value());
+                }
+                if (conv2dAttrs.deviceComputeKernelConfig.has_value()) {
+                  conv2dOp.setComputeConfigAttr(
+                      conv2dAttrs.deviceComputeKernelConfig.value());
+                  }
               }
             }
           }
+        });
+    TTMLIR_DEBUG(
+        ttmlir::LogComponent::Optimizer,
+        "Finished applying op configurations for function: {0}",
+        func.getName().str());
+    llvm::DenseMap<Operation *, Operation *> insertedMemoryReconfigOps;
+    if (memReconfigEnabled) {
+      insertedMemoryReconfigOps =
+          processMemReconfigEdges(memReconfigEntryMap, deviceGrid);
+    }
+
+    processSpillOps(spillToDramOps, deviceGrid, insertedMemoryReconfigOps);
+
+    // Try finding ops that can be upgraded from DRAM to L1 interleaved
+    // layout.
+    // if (l1InterleavedFallbackAnalysisEnabled) {
+    //   L1InterleavedFallbackAnalysis l1InterleavedFallbackAnalysis =
+    //       getAnalysis<L1InterleavedFallbackAnalysis>();
+    //   l1InterleavedFallbackAnalysis.init(L1InterleavedFallbackAnalysisInput(
+    //       l1InterleavedLegalConfigs, opConfigAnalysis.getResult(), func,
+    //       getScaledUsableL1Size(chipDesc)));
+    //   auto l1InterleavedOpConfigs =
+    //       l1InterleavedFallbackAnalysis.getResult().upgradedConfigs;
+
+    //   applyL1InterleavedLayoutChanges(l1InterleavedOpConfigs);
+    // }
+
+    SmallVector<Type> funcResultTypes;
+
+    // Pick up return op result types and update func type.
+    func->walk([&](Operation *op) {
+      if (op->getNumResults() == 0) {
+        func::ReturnOp funcReturn = dyn_cast<func::ReturnOp>(op);
+        if (funcReturn) {
+          funcResultTypes.append(funcReturn.getOperandTypes().begin(),
+                                  funcReturn.getOperandTypes().end());
         }
-      });
-
-      llvm::DenseMap<Operation *, Operation *> insertedMemoryReconfigOps;
-      if (memReconfigEnabled) {
-        insertedMemoryReconfigOps =
-            processMemReconfigEdges(memReconfigEntryMap, deviceGrid);
+        return;
       }
+    });
 
-      processSpillOps(spillToDramOps, deviceGrid, insertedMemoryReconfigOps);
-
-      // Try finding ops that can be upgraded from DRAM to L1 interleaved
-      // layout.
-      if (l1InterleavedFallbackAnalysisEnabled) {
-        L1InterleavedFallbackAnalysis l1InterleavedFallbackAnalysis =
-            getAnalysis<L1InterleavedFallbackAnalysis>();
-        l1InterleavedFallbackAnalysis.init(L1InterleavedFallbackAnalysisInput(
-            l1InterleavedLegalConfigs, opConfigAnalysis.getResult(), func,
-            getScaledUsableL1Size(chipDesc)));
-        auto l1InterleavedOpConfigs =
-            l1InterleavedFallbackAnalysis.getResult().upgradedConfigs;
-
-        applyL1InterleavedLayoutChanges(l1InterleavedOpConfigs);
-      }
-
-      SmallVector<Type> funcResultTypes;
-
-      // Pick up return op result types and update func type.
-      func->walk([&](Operation *op) {
-        if (op->getNumResults() == 0) {
-          func::ReturnOp funcReturn = dyn_cast<func::ReturnOp>(op);
-          if (funcReturn) {
-            funcResultTypes.append(funcReturn.getOperandTypes().begin(),
-                                   funcReturn.getOperandTypes().end());
-          }
-          return;
-        }
-      });
-
-      // Update the function type to reflect the updated return operation's
-      // result types.
-      //
-      FunctionType funcType = func.getFunctionType();
-      FunctionType newFuncType = FunctionType::get(
+    // Update the function type to reflect the updated return operation's
+    // result types.
+    //
+    FunctionType funcType = func.getFunctionType();
+    FunctionType newFuncType = FunctionType::get(
           func.getContext(), funcType.getInputs(), funcResultTypes);
       func.setType(newFuncType);
-    });
-  }
+  });
+}
+
 
 private:
   void assertOverridesValid() {
@@ -927,5 +1050,4 @@ private:
     }
   }
 };
-
-} // namespace mlir::tt::ttnn
+} // namespace mlir::tt::ttnn 

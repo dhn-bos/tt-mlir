@@ -15,6 +15,8 @@
 #include "ttmlir/Dialect/TTIR/Transforms/Passes.h"
 #include "ttmlir/Dialect/TTNN/Transforms/Passes.h"
 #include "ttmlir/Support/Logger.h"
+#include "ttmlir/OpModel/TTNN/SingletonDeviceContext.h"
+
 #include "ttmlir/Transforms/Passes.h"
 
 #include "mlir/Pass/PassManager.h"
@@ -188,9 +190,15 @@ void createTTIRToTTNNBackendPipeline(
   createTTNNPipelineAnalysisPasses(devicePm, options);
   // We need to re-run const-eval to pick up const prepare conv2d weight ops
   // split during the analysis passes.
+  TTMLIR_DEBUG(
+      ttmlir::LogComponent::General,
+      "Re-running const-eval after TTNN analysis passes if enabled.");
   if (options.enableConstEval) {
     devicePm.addPass(transforms::createConstEvalHoistTransform());
   }
+  TTMLIR_DEBUG(
+      ttmlir::LogComponent::General,
+      "Creating TTNN layout decomposition pass.");
   createTTNNPipelineLayoutDecompositionPass(devicePm, options);
   if (options.enableTrace) {
     devicePm.addPass(tt::ttnn::createTTNNTraceHoistTransform());
